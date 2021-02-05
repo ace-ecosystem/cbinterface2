@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "cbinterface2"
+version = "0.1.0"
+description = ""
+authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+cbapi = "^1.7.3"
+coloredlogs = "^15.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+cbi = "cbinterface2.cli:main"
