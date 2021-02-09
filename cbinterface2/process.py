@@ -2,15 +2,17 @@
 """
 
 import logging
+
+from io import StringIO
 from datetime import datetime
+from contextlib import redirect_stdout
+from typing import Generator, List, Dict
+
 from cbapi.response import Process, models
-#, ProcessV4Parser
 from cbapi.errors import ObjectNotFoundError
 
-from typing import Generator
 
-
-def get_all_events(p: Process, max_segments=None):
+def process_to_dict(p: Process, max_segments=None) -> Dict:
     """Get all events for this process."""
 
     all_segments = p.get_segments()
@@ -18,9 +20,19 @@ def get_all_events(p: Process, max_segments=None):
         mex_segments = len(all_segments)
 
     p.refresh()
-    results = p._info
+    results = p.original_document
     results['captured_segments'] = {}
     results['all_segments'] = all_segments
+
+    results['process_ancestry'] = StringIO()
+    with redirect_stdout(results['process_ancestry']):
+        print_ancestry(p)
+    results['process_ancestry'] = results['process_ancestry'].getvalue()
+
+    results['process_tree'] = StringIO()
+    with redirect_stdout(results['process_tree']):
+        print_process_tree(p)
+    results['process_tree'] = results['process_tree'].getvalue()
 
     if p.current_segment:
         # if current_segment is set, something specifically targeted this segment
@@ -35,7 +47,7 @@ def get_all_events(p: Process, max_segments=None):
 
     return results
 
-def cb_event_to_dict(cbevent: models.CbEvent):
+def cb_event_to_dict(cbevent: models.CbEvent) -> Dict:
     """Convert a single CbEvent to dict."""
     data = {}
     data['event_type'] = cbevent.event_type
@@ -43,11 +55,11 @@ def cb_event_to_dict(cbevent: models.CbEvent):
         data[title] = str(getattr(cbevent, title, ""))
     return data
 
-def cb_events_to_dict(cbevents: Generator[models.CbEvent, None, None]):
-    """Convert a list of CbEvents to dict."""
+def cb_events_to_dict(cbevents: Generator[models.CbEvent, None, None]) -> List[Dict]:
+    """Convert a list of CbEvents to a list of dictionaries."""
     return [cb_event_to_dict(event) for event in cbevents]
 
-def segment_events_to_dict(p: Process):
+def segment_events_to_dict(p: Process) -> Dict:
     """Convert current segment CbEvents to dict."""
     if not p.current_segment:
         return {}
@@ -57,14 +69,6 @@ def segment_events_to_dict(p: Process):
             'modloads': cb_events_to_dict(p.modloads),
             'crossprocs': cb_events_to_dict(p.crossprocs),
             'children': cb_events_to_dict(p.children)}
-
-def process_exists(p: Process):
-    """Return True if the process exists."""
-    try:
-        p.refresh()
-        return True
-    except ObjectNotFoundError:
-        return False
 
 def print_process_info(proc: Process, return_string: bool=False, raw_print=False, header=True):
     """Analyst friendly custom process data format.
