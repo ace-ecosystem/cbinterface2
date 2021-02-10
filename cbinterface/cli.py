@@ -258,6 +258,7 @@ def main():
     )
     parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
     parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")
+    parser_lr.add_argument("-i", "--sensor-isolation-toggle", action="store_true", help="Sensor hostname/ID to isolation/unisolate (on/off).")
 
     # live response subparser
     lr_subparsers = parser_lr.add_subparsers(dest="live_response_command")
@@ -495,6 +496,22 @@ def main():
             cmd = ExecuteCommand(args.execute_command)
             commands.append(cmd)
             LOGGER.info(f"recorded command: {cmd}")
+
+        if args.sensor_isolation_toggle:
+            result = None
+            state = 'isolated' if sensor.is_isolating else 'unisolated'
+            desired_state = 'unisolated' if sensor.is_isolating else 'isolated'
+            LOGGER.info(f"sensor {sensor.id}:{sensor.hostname} is currently {state}. Changing state to: {desired_state}")
+            if sensor.is_isolating:
+                result = sensor.unisolate()
+            else:
+                result = sensor.isolate()
+            if result:
+                state = 'isolated' if sensor.is_isolating else 'unisolated'
+                LOGGER.info(f"successfully {state} sensor {sensor.id}:{sensor.hostname}")
+            else:
+                state = 'unisolate' if sensor.is_isolating else 'isolate'
+                LOGGER.error(f"failed to {state} sensor {sensor.id}:{sensor.hostname}")
 
         # Put File #
         if args.live_response_command and args.live_response_command.lower() == "put":
