@@ -7,7 +7,8 @@ from dateutil import tz
 from cbapi.response import CbResponseAPI, Sensor
 from cbapi.response.models import SensorQuery
 
-LOGGER = logging.getLogger('cbinterface.sensor')
+LOGGER = logging.getLogger("cbinterface.sensor")
+
 
 def is_sensor_online(s: SensorQuery) -> bool:
     """Return True if the sensor is online."""
@@ -16,6 +17,7 @@ def is_sensor_online(s: SensorQuery) -> bool:
     if s.status.lower() == "online":
         return True
     return False
+
 
 def make_sensor_query(cb: CbResponseAPI, sensor_query: str) -> SensorQuery:
     """Construct a SensorQuery object."""
@@ -30,6 +32,7 @@ def make_sensor_query(cb: CbResponseAPI, sensor_query: str) -> SensorQuery:
     LOGGER.info(f"got {len(sensors)} sensor results.")
     return sensors
 
+
 def find_sensor_by_hostname(cb: CbResponseAPI, hostname: str) -> Sensor:
     """Find a Sensor by hostname."""
     sensors = make_sensor_query(cb, f"hostname:{hostname}")
@@ -39,6 +42,7 @@ def find_sensor_by_hostname(cb: CbResponseAPI, hostname: str) -> Sensor:
         LOGGER.warning(f"{len(sensors)} sensors with hostname={hostname}")
         return None
     return None
+
 
 def sensor_info(sensor: Sensor):
     text = "\n"

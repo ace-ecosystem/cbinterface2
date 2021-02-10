@@ -19,3 +19,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 cbinterface = "cbinterface2.cli:main"
+
+[tool.black]
+line-length = 120
