@@ -13,8 +13,8 @@ from cbapi.live_response_api import CbLRManagerBase, LiveResponseJobScheduler, W
 
 from typing import List, Union
 
-from cbinterface2.sensor import is_sensor_online
-from cbinterface2.commands import BaseSessionCommand
+from cbinterface.sensor import is_sensor_online
+from cbinterface.commands import BaseSessionCommand
 
 LOGGER = logging.getLogger("cbinterface.session")
 
@@ -263,7 +263,7 @@ def get_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
 
 def get_file_content(cb: CbResponseAPI, session_id: str, file_id: str):
     """Get file content stored in LR session and write the file locally."""
-    from cbinterface2.helpers import get_os_independant_filepath
+    from cbinterface.helpers import get_os_independant_filepath
 
     try:
         file_metadata = cb.get_object(f"{CBLR_BASE}/session/{session_id}/file/{file_id}")

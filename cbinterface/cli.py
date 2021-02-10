@@ -12,16 +12,14 @@ import datetime
 import json
 import signal
 
-from typing import Dict
-
 import cbapi.auth
 from cbapi.response import CbResponseAPI, Process, Sensor
 from cbapi.errors import ObjectNotFoundError
 
-from cbinterface2.helpers import is_uuid
-from cbinterface2.query import make_process_query, print_facet_histogram
-from cbinterface2.sensor import is_sensor_online, find_sensor_by_hostname, make_sensor_query, sensor_info
-from cbinterface2.process import (
+from cbinterface.helpers import is_uuid
+from cbinterface.query import make_process_query, print_facet_histogram
+from cbinterface.sensor import is_sensor_online, find_sensor_by_hostname, make_sensor_query, sensor_info
+from cbinterface.process import (
     process_to_dict,
     inspect_process_tree,
     print_process_info,
@@ -34,7 +32,7 @@ from cbinterface2.process import (
     print_crossprocs,
     print_childprocs,
 )
-from cbinterface2.sessions import (
+from cbinterface.sessions import (
     CustomLiveResponseSessionManager,
     get_session_by_id,
     sensor_live_response_sessions_by_sensor_id,
@@ -43,7 +41,7 @@ from cbinterface2.sessions import (
     get_command_result,
     get_file_content,
 )
-from cbinterface2.commands import (
+from cbinterface.commands import (
     PutFile,
     ProcessListing,
     GetFile,

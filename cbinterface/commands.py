@@ -313,7 +313,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
         dump_object.delete()
 
     def process_result(self):
-        from cbinterface2.sessions import get_command_result
+        from cbinterface.sessions import get_command_result
 
         # should only make it here if an error was not raise
         # check to see if the command has success status with server
@@ -360,7 +360,7 @@ class GetFile(BaseSessionCommand):
 
     def process_result(self):
         """Write the results to a local file."""
-        from cbinterface2.helpers import get_os_independant_filepath
+        from cbinterface.helpers import get_os_independant_filepath
 
         if self.output_filename is None:
             filepath = get_os_independant_filepath(self._file_path)
@@ -470,7 +470,7 @@ class KillProcessByName(BaseSessionCommand):
         self.nested_commands = {}
 
     def run(self, session: LiveResponseSession):
-        from cbinterface2.helpers import get_os_independant_filepath
+        from cbinterface.helpers import get_os_independant_filepath
 
         for process in session.list_processes():
             filepath = get_os_independant_filepath(process["path"])
@@ -506,8 +506,8 @@ class RecursiveKillProcessByName(BaseSessionCommand):
         self.local_session_manager = None
 
     def run(self, session: LiveResponseSession):
-        from cbinterface2.helpers import get_os_independant_filepath
-        from cbinterface2.sessions import CustomLiveResponseSessionManager
+        from cbinterface.helpers import get_os_independant_filepath
+        from cbinterface.sessions import CustomLiveResponseSessionManager
 
         self.local_session_manager = CustomLiveResponseSessionManager(session._cb)
         for process in session.list_processes():
