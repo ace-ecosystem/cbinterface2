@@ -222,12 +222,11 @@ def main():
         if len(processes) > 0 and print_results:
             print("\n------------------------- QUERY RESULTS -------------------------")
             for proc in processes:
-                print("\n  -------------------------")
+                print("  -------------------------")
                 if args.all_details:
                     print(proc)
                 else:
                     print_process_info(proc, raw_print=args.all_details, header=False)
-            print()
 
         return True
 
