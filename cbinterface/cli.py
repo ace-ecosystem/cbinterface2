@@ -176,9 +176,7 @@ def main():
     )
 
     # process inspection parser
-    parser_inspect = subparsers.add_parser(
-        "inspect", aliases=["proc", "process"], help="Inspect process events and metadata."
-    )
+    parser_inspect = subparsers.add_parser("inspect", aliases=["proc"], help="Inspect process events and metadata.")
     parser_inspect.add_argument(
         "guid_with_optional_segment", help="the process GUID/segment to inspect. Segment is optional."
     )
@@ -252,7 +250,7 @@ def main():
 
     # live response parser
     parser_lr = subparsers.add_parser(
-        "live-response", aliases=["live", "lr"], help="perform live response actions on a sensor."
+        "live-response", aliases=["lr"], help="perform live response actions on a sensor."
     )
     parser_lr.add_argument("hostname_or_sensor_id", help="the hostname or sensor_id to go live with.")
     parser_lr.add_argument(
@@ -294,11 +292,7 @@ def main():
     )
 
     # live response remediation parser
-    remediation_commands_keys = ["rem", "destroy"]
-    parser_remediate = lr_subparsers.add_parser(
-        "remediate", aliases=remediation_commands_keys, help="remdiation (delete/kill) actions"
-    )
-    remediation_commands_keys.append("remediate")
+    parser_remediate = lr_subparsers.add_parser("remediate", help="remdiation (delete/kill) actions")
     parser_remediate.add_argument(
         "-f", "--delete-file-path", action="store", help="delete the file at this path on the sensor"
     )
@@ -381,6 +375,8 @@ def main():
     if args.command and args.command.lower() == "sensor-query":
         LOGGER.info(f"searching {args.environment} environment for sensor query: {args.sensor_query}...")
         sensors = make_sensor_query(cb, args.sensor_query)
+        if not sensors:
+            return None
 
         # don't display large results by default
         print_results = True
@@ -561,7 +557,7 @@ def main():
                 LOGGER.info(f"recorded command: {cmd}")
 
         # Sensor Remediation #
-        if args.live_response_command and args.live_response_command in remediation_commands_keys:
+        if args.live_response_command and args.live_response_command == "remediate":
             if args.delete_file_path:
                 cmd = DeleteFile(args.delete_file_path)
                 commands.append(cmd)

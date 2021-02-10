@@ -1,8 +1,13 @@
 [tool.poetry]
-name = "cbinterface2"
-version = "0.1.0"
-description = ""
+name = "cbinterface"
+version = "2.0.0"
+description = "command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions"
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
+license = "Apache-2.0"
+readme = "README.md"
+homepage = "https://github.com/seanmcfeely/cbinterface2"
+keywords = ["Carbon Black", "carbonblack"]
+include = ["README.md"]
 
 [tool.poetry.dependencies]
 python = "^3.6"
@@ -18,7 +23,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-cbinterface = "cbinterface2.cli:main"
+cbinterface = "cbinterface.cli:main"
 
 [tool.black]
 line-length = 120

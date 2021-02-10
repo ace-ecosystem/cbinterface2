@@ -22,11 +22,12 @@ def is_sensor_online(s: SensorQuery) -> bool:
 def make_sensor_query(cb: CbResponseAPI, sensor_query: str) -> SensorQuery:
     """Construct a SensorQuery object."""
     try:
+        if ":" not in sensor_query:
+            LOGGER.warning("No field specification passed. Fields: ip, hostname, groupid")
+            LOGGER.info(f"Making assumption and updating query to: 'hostname:{sensor_query}'")
+            sensor_query = f"hostname:{sensor_query}"
         sensors = cb.select(Sensor).where(sensor_query)
     except ValueError as e:
-        if ":" not in sensor_query:
-            LOGGER.error("Must specify field. One of: ip, hostname, groupid ")
-            return False
         LOGGER.error(f"{e}")
         return False
     LOGGER.info(f"got {len(sensors)} sensor results.")
