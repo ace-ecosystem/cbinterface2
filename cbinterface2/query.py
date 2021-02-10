@@ -5,8 +5,8 @@ import datetime
 import logging
 from dateutil import tz
 from cbapi.response import CbResponseAPI, Process
-#from .helpers import as_configured_timezone
 
+LOGGER = logging.getLogger('cbinterface.query')
 
 def make_process_query(cb: CbResponseAPI, query: str, start_time: datetime.datetime=None, last_time: datetime.datetime=None):
     """Query the CbResponse environment and interface results.
@@ -20,14 +20,14 @@ def make_process_query(cb: CbResponseAPI, query: str, start_time: datetime.datet
     Returns: cbapi.response.models.ProcessQuery or empty list.
     """
     processes = []
-    logging.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
+    LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
     try:
         processes = cb.select(Process).where(query).group_by('id')
         processes = processes.min_last_server_update(start_time) if start_time else processes
         processes = processes.max_last_server_update(last_time) if last_time else processes
-        logging.info(f"got {len(processes)} process results grouped by id.")
+        LOGGER.info(f"got {len(processes)} process results grouped by id.")
     except Exception as e:
-        logging.error(f"problem querying carbonblack with '{query}' : {e}")
+        LOGGER.error(f"problem querying carbonblack with '{query}' : {e}")
 
     return processes
 

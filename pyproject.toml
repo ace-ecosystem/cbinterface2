@@ -8,6 +8,7 @@ authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 python = "^3.6"
 cbapi = "^1.7.3"
 coloredlogs = "^15.0"
+argcomplete = "^1.12.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -17,4 +18,4 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-cbi = "cbinterface2.cli:main"
+cbinterface = "cbinterface2.cli:main"

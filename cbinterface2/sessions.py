@@ -1,10 +1,10 @@
-"""All things LR session and job/command management."""
+"""All things LR sessions."""
 
+import io
+import os
 import time
 import logging
 import threading
-
-from concurrent.futures import Future
 
 from cbapi.response.cblr import LiveResponseSession, LiveResponseSessionManager
 from cbapi.response import CbResponseAPI, Sensor
@@ -14,75 +14,11 @@ from cbapi.live_response_api import CbLRManagerBase, LiveResponseJobScheduler, W
 from typing import List, Union
 
 from cbinterface2.sensor import is_sensor_online
+from cbinterface2.commands import BaseSessionCommand
+
+LOGGER = logging.getLogger('cbinterface.session')
 
 CBLR_BASE = "/api/v1/cblr"
-
-class BaseSessionCommand():
-    """For storing and managing session commands.
-
-    Session Commands are 'jobs' with concurrent.futures.
-    """
-    def __init__(self, description):
-        self.description = description
-        self.future = None
-        self.session_id = None
-        self.sensor_id = None
-        self._exception = None
-        self._result = None
-
-    @property
-    def initiatied(self):
-        """True if future exists."""
-        if isinstance(self.future, Future):
-            return True
-        return False
-
-    @property
-    def done(self):
-        if self.future and self.future.done():
-            return True
-        return False
-
-    @property
-    def exception(self):
-        if self.done:
-            self._exception = self.future.exception()
-        return self._exception
-
-    @property
-    def has_result(self):
-        if self.done and self.exception is None:
-            return True
-        return False
-
-    @property
-    def result(self):
-        if self.has_result:
-            return self.future.result()
-        return None
-
-    @property
-    def status(self):
-        if not self.initiatied:
-            return "not submitted"
-        if self.done:
-            if self.exception:
-                return "error"
-            if self.has_result:
-                return "complete"
-        return "pending"
-
-    def run(self):
-        """The function to implement the live response command logic.
-        """
-        raise NotImplemented()
-
-    def process_result(self):
-        """Implement logic to process any results."""
-        pass
-
-    def __str__(self):
-        return f"LrSessionCommand: {self.description} - status: {self.status}"
 
 
 class CustomLiveResponseSessionManager(LiveResponseSessionManager):
@@ -102,19 +38,26 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         # for storing initiatied commands
         self.commands = []
 
-    def get_session(self, sensor: Sensor):
-        """Get or create LR session."""
+    def active_session(self, sensor: Sensor):
+        """Return any active sessions on this sensor or None."""
         active = sensor_live_response_sessions(sensor, active_or_pending=True)
         if active:
             session_data = active[0]
             session_id = session_data['id']
-            logging.info(f"found existing session id={session_id} in '{session_data['status']}' state")
+            LOGGER.info(f"found existing session id={session_id} in '{session_data['status']}' state")
             self._sessions[sensor.id] = self.cblr_session_cls(self, session_id, sensor.id, session_data=session_data)
             return self._sessions[sensor.id] 
+        return None
+
+    def get_session(self, sensor: Sensor):
+        """Get or create LR session."""
+        active_session = self.active_session(sensor)
+        if isinstance(active_session, self.cblr_session_cls):
+            return active_session
 
         session_data = self._cb.post_object(f"{CBLR_BASE}/session", {'sensor_id': sensor.id}).json()
         session_id = session_data["id"]
-        logging.info(f"created session id={session_id}")
+        LOGGER.info(f"created session id={session_id}")
         self._sessions[sensor.id] = self.cblr_session_cls(self, session_id, sensor.id, session_data=session_data)
         return self._sessions[sensor.id]
 
@@ -123,13 +66,13 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         
         Default timeout is 7 days.
         """
-        logging.info(f"attempting to get active session on sensor {sensor.id} (hostname:{sensor.hostname}) for up to {timeout/60} minutes")
+        LOGGER.info(f"attempting to get active session on sensor {sensor.id} (hostname:{sensor.hostname}) for up to {timeout/60} minutes")
         start_time = time.time()
         session = None
         status = None
         while status != 'active' and time.time() - start_time < timeout:
             if not is_sensor_online(sensor):
-                logging.debug(f"waiting for sensor {sensor.id} to come online...")
+                LOGGER.debug(f"waiting for sensor {sensor.id} to come online...")
                 time.sleep(1)
                 continue
             if status is None:
@@ -138,10 +81,10 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
             time.sleep(0.5)
 
         if session and is_session_active(session):
-            logging.info(f"got active session {session.session_id} on sensor {sensor.id}.")
+            LOGGER.info(f"got active session {session.session_id} on sensor {sensor.id}.")
         return session
 
-    def submit_command(self, command: BaseSessionCommand, sensor: Sensor):
+    def submit_command(self, command: BaseSessionCommand, sensor: Union[int, Sensor]):
         """
         Create a new job to be executed as a Live Response.
 
@@ -153,16 +96,27 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         """
         assert isinstance(command, BaseSessionCommand)
 
+        sensor_id = sensor
+        if isinstance(sensor, Sensor):
+            sensor_id = sensor.id
+
         if self._job_scheduler is None:
             # spawn the scheduler thread
             self._job_scheduler = LiveResponseJobScheduler(self._cb)
             self._job_scheduler.start()
 
-        work_item = WorkItem(command.run, sensor)
+        if sensor_id not in self._sessions:
+            sensor = Sensor(self._cb, sensor_id, force_init=True)
+            active_session = self.active_session(sensor)
+            if active_session is None:
+                self.wait_for_active_session(sensor)
+
+        work_item = WorkItem(command.run, sensor_id)
         self._job_scheduler.submit_job(work_item)
         command.future = work_item.future
-        command.sensor_id = sensor.id
-        command.session_id = self._sessions[sensor.id].session_id
+        command.sensor_id = sensor_id
+        command.session_id = self._sessions[sensor_id].session_id
+        command.session_data = self._sessions[sensor_id].session_data
         self.commands.append(command)
         return command
 
@@ -171,25 +125,24 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
         Monitor commands and sessions.
         """
-        logging.info(f"waiting for {len(self.commands)} commands to complete ...")
+        LOGGER.info(f"waiting for {len(self.commands)} commands to complete ...")
         while self.commands:
             for cmd in self.commands:
                 if not cmd.initiatied:
-                    logging.error(f"Skipping uninitialized command: {cmd}")
+                    LOGGER.error(f"skipping uninitialized command: {cmd}")
                     self.commands.remove(cmd)
                     continue
                 if cmd.exception:
-                    logging.error(f"command encountered exception: {cmd}")
-                    logging.error(f"exception for {cmd}: {cmd.exception}")
+                    LOGGER.error(f"exception for {cmd}: {cmd.exception}")
                     self.commands.remove(cmd)
                     continue
                 if not get_session_by_id(self._cb, cmd.session_id):
-                    logging.error(f"session {cmd.session_id} is gone. command has gone to the void: {cmd}")
+                    LOGGER.error(f"session {cmd.session_id} is gone. command has gone to the void: {cmd}")
                     self.commands.remove(cmd)
                     continue
 
                 if cmd.has_result:
-                    logging.debug(f"yielding {cmd}")
+                    LOGGER.debug(f"yielding {cmd}")
                     yield cmd
                     self.commands.remove(cmd)
 
@@ -198,14 +151,14 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
     def process_completed_commands(self):
         for cmd in self.yield_completed_commands():
-            logging.info(f"processing => {cmd}")
+            LOGGER.info(f"processing => {cmd}")
             cmd.process_result()
 
     def _keep_active_sessions_alive_thread(self):
         """Used by a thread to ping active sessions so they don't
            close on long running session commands.
         """
-        logging.debug("Starting custom Live Response session keepalive and cleanup task")
+        LOGGER.debug("Starting custom Live Response session keepalive and cleanup task")
         while True:
             time.sleep(self._timeout)
 
@@ -217,13 +170,13 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
                     else:
                         try:
                             if is_session_active(session):
-                                logging.info(f"sending keepalive for session {session.session_id}")
+                                LOGGER.info(f"sending keepalive for session {session.session_id}")
                                 self._send_keepalive(session.session_id)
                         except ObjectNotFoundError:
-                            logging.debug(f"Session {session.session_id} for sensor {session.sensor_id} not valid any longer, removing from cache")
+                            LOGGER.debug(f"Session {session.session_id} for sensor {session.sensor_id} not valid any longer, removing from cache")
                             delete_list.append(session.sensor_id)
                         except Exception as e:
-                            logging.warning(f"Keepalive on session {session.session_id} (sensor {session.sensor_id}) failed with unknown error: {e}")
+                            LOGGER.warning(f"Keepalive on session {session.session_id} (sensor {session.sensor_id}) failed with unknown error: {e}")
                             delete_list.append(session.sensor_id)
 
                 for sensor_id in delete_list:
@@ -257,7 +210,7 @@ def get_session_by_id(cb: CbResponseAPI, session_id):
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}")
     except ObjectNotFoundError:
-        logging.warning(f"no live resonse session by ID={session_id}")
+        LOGGER.warning(f"no live resonse session by ID={session_id}")
         return None
 
 def get_session_status(cb: CbResponseAPI, session_id):
@@ -281,53 +234,35 @@ def get_session_commands(cb: CbResponseAPI, session_id: str):
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command")
     except ObjectNotFoundError:
-        logging.warning(f"no live resonse session by ID={session_id}")
-        return None
-
-def stream_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
-    """Get results of a LR session command."""
-    try:
-        return cb.session.get(f"{CBLR_BASE}/session/{session_id}/command/{command_id}", stream=True)
-    except ObjectNotFoundError:
-        logging.warning(f"no live resonse session by ID={session_id}")
+        LOGGER.warning(f"no live resonse session by ID={session_id}")
         return None
 
 def get_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
-    result = stream_command_result(cb, session_id, command_id)
-    if result is None:
+    """Get results of a LR session command."""
+    try:
+        return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command/{command_id}")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"no live resonse session and/or command combination for {session_id}:{command_id}")
         return None
-    if result.status_code != 200:
-        logging.error(f"got {result.status_code} from server getting result of command {command_id} for session {session_id}")
-        return None
-    content = b''
-    for chunk in result.iter_content(io.DEFAULT_BUFFER_SIZE):
-        content += chunk
-    return content
 
-""" 
-# Unused code for removal. 
-def wait_for_jobs(jobs: Dict, timeout=300):
-    start_time = time.time()
-    timeout = start_time + timeout
-    work = list(jobs.keys())
-    logging.info(f"waiting for {work} job(s) to complete or timeout...")
-    while len(work) > 0:
-        # iterate over all the futures
-        for f in jobs.keys():
-            sensor_id = jobs[f]['sensor_id']
-            if not f.done():
-                continue
-            if f.exception() is None:
-                print(f"Sensor {sensor_id} has result:")
-                yield f
-                #pprint(f.result())
-                #completed_sensors.append(futures[f])
-            else:
-                print(f"Sensor {sensor_id} had error:")
-                print(f.exception())
-            work.remove(f)
-        time.sleep(1)
-        if time.time() > timeout:
-            logging.warning(f"reached timeout waiting for {len(jobs)} to complete.")
-            break
-"""
+def get_file_content(cb: CbResponseAPI, session_id: str, file_id: str):
+    """Get file content stored in LR session and write the file locally."""
+    from cbinterface2.helpers import get_os_independant_filepath
+    try:
+        file_metadata = cb.get_object(f"{CBLR_BASE}/session/{session_id}/file/{file_id}")
+        if file_metadata:
+            filepath = get_os_independant_filepath(file_metadata['file_name'])
+            filename = f"{session_id}_{filepath.name}"
+        result = cb.session.get(f"{CBLR_BASE}/session/{session_id}/file/{file_id}/content", stream=True)
+        if result.status_code != 200:
+            LOGGER.error(f"got {result.status_code} from server getting file {file_id} content for session {session_id}")
+            return
+        with open(filename, 'wb') as fp:
+            for chunk in result.iter_content(io.DEFAULT_BUFFER_SIZE):
+                fp.write(chunk)
+        if os.path.exists(filename):
+            LOGGER.info(f"wrote: {filename}")
+        return os.path.exists(filename)
+    except ObjectNotFoundError:
+        LOGGER.warning(f"no file {file_id} content with session {session_id}")
+        return

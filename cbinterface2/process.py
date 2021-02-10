@@ -11,6 +11,7 @@ from typing import Generator, List, Dict
 from cbapi.response import Process, models
 from cbapi.errors import ObjectNotFoundError
 
+LOGGER = logging.getLogger('cbinterface.process')
 
 def process_to_dict(p: Process, max_segments=None) -> Dict:
     """Get all events for this process."""
@@ -80,7 +81,7 @@ def print_process_info(proc: Process, return_string: bool=False, raw_print=False
     """
 
     if not proc._info and raw_print:
-        logging.debug(f"retrieving process info.")
+        LOGGER.debug(f"retrieving process info.")
         proc.refresh()
 
     txt = ""
@@ -315,9 +316,9 @@ def print_childprocs(p: Process, current_segment_only: bool=False, raw_print=Fal
                     status = "suppressed"
                 status = "terminated" if spawn.process.terminated else "running"
                 if spawn.process.terminated and terminate_cp is None:
-                    logging.debug(f"notice: no termination event found. process must have terminated elsewhere?")
+                    LOGGER.debug(f"notice: no termination event found. process must have terminated elsewhere?")
             except ObjectNotFoundError:
-                logging.debug(f"child process not found. ")
+                LOGGER.debug(f"child process not found. ")
 
             print(f" @{spawn.timestamp}: ({status}) {spawn.path} md5={spawn.md5} pid={spawn.pid} - {cp_guid}")
         print()
@@ -337,5 +338,5 @@ def print_childprocs(p: Process, current_segment_only: bool=False, raw_print=Fal
         print()
         """
     except Exception as e:
-        logging.error(f"unhandled exception when enumerating childproc events: {e}")
+        LOGGER.error(f"unhandled exception when enumerating childproc events: {e}")
     return

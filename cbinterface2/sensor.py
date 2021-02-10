@@ -7,10 +7,12 @@ from dateutil import tz
 from cbapi.response import CbResponseAPI, Sensor
 from cbapi.response.models import SensorQuery
 
+LOGGER = logging.getLogger('cbinterface.sensor')
+
 def is_sensor_online(s: SensorQuery) -> bool:
     """Return True if the sensor is online."""
     s.refresh()
-    logging.debug(f"sensor status: {s.status}")
+    LOGGER.debug(f"sensor status: {s.status}")
     if s.status.lower() == "online":
         return True
     return False
@@ -21,11 +23,11 @@ def make_sensor_query(cb: CbResponseAPI, sensor_query: str) -> SensorQuery:
         sensors = cb.select(Sensor).where(sensor_query)
     except ValueError as e:
         if ":" not in sensor_query:
-            logging.error("Must specify field. One of: ip, hostname, groupid ")
+            LOGGER.error("Must specify field. One of: ip, hostname, groupid ")
             return False
-        logging.error(f"{e}")
+        LOGGER.error(f"{e}")
         return False
-    logging.info(f"got {len(sensors)} sensor results.")
+    LOGGER.info(f"got {len(sensors)} sensor results.")
     return sensors
 
 def find_sensor_by_hostname(cb: CbResponseAPI, hostname: str) -> Sensor:
@@ -34,7 +36,7 @@ def find_sensor_by_hostname(cb: CbResponseAPI, hostname: str) -> Sensor:
     if len(sensors) == 1:
         return sensors[0]
     elif len(sensors) > 1:
-        logging.warning(f"{len(sensors)} sensors with hostname={hostname}")
+        LOGGER.warning(f"{len(sensors)} sensors with hostname={hostname}")
         return None
     return None
 
@@ -62,13 +64,3 @@ def sensor_info(sensor: Sensor):
     for ni in sensor.network_interfaces:
         text += f"\t\t{ni}\n"
     return text
-
-    #if sensor.status == "Online":
-    #    text += "\n\t+ Tring to get logical drives..\n"
-    #    if not self.lr_session:
-    #        try:
-    #            self.go_live()
-    #        except Exception as e:
-    #            raise Exception("Failed to Go Live on sensor: '{}'".format(str(e)))
-    #    text += "\t\tAvailable Drives: %s" % ' '.join(self.lr_session.session_data.get('drives', []))
-    #    text += "\n"
