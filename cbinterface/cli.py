@@ -61,6 +61,8 @@ from cbinterface.commands import (
     GetSystemMemoryDump,
 )
 
+from cbinterface.enumerations import logon_history
+
 LOGGER = logging.getLogger("cbinterface.cli")
 
 
@@ -324,6 +326,12 @@ def main():
         "-f", "--get-file-content", action="store", help="byte stream any file content to stdout. (use a pipe)"
     )
 
+    # enumeration parser
+    parser_enumeration = subparsers.add_parser("enumerate", help="get enumeration data")
+    parser_enumeration.add_argument(
+        "-lh", "--logon-history", action="store", help="given username or hostname, enumerate logon history (Windows OS)."
+    )
+
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
@@ -396,6 +404,12 @@ def main():
                     print(sensor_info(sensor))
             print()
         return True
+
+    # Enumerations #
+    if args.command and args.command == "enumerate":
+        if args.logon_history:
+            logon_history(cb, args.logon_history)
+            return
 
     # Process Inspection #
     if args.command and (args.command.lower() == "inspect" or args.command.lower().startswith("proc")):
