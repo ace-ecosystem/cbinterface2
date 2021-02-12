@@ -260,7 +260,12 @@ def main():
     )
     parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
     parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")
-    parser_lr.add_argument("-i", "--sensor-isolation-toggle", action="store_true", help="Sensor hostname/ID to isolation/unisolate (on/off).")
+    parser_lr.add_argument(
+        "-i",
+        "--sensor-isolation-toggle",
+        action="store_true",
+        help="Sensor hostname/ID to isolation/unisolate (on/off).",
+    )
 
     # live response subparser
     lr_subparsers = parser_lr.add_subparsers(dest="live_response_command")
@@ -329,7 +334,10 @@ def main():
     # enumeration parser
     parser_enumeration = subparsers.add_parser("enumerate", help="get enumeration data")
     parser_enumeration.add_argument(
-        "-lh", "--logon-history", action="store", help="given username or hostname, enumerate logon history (Windows OS)."
+        "-lh",
+        "--logon-history",
+        action="store",
+        help="given username or hostname, enumerate logon history (Windows OS).",
     )
 
     argcomplete.autocomplete(parser)
@@ -513,18 +521,20 @@ def main():
 
         if args.sensor_isolation_toggle:
             result = None
-            state = 'isolated' if sensor.is_isolating else 'unisolated'
-            desired_state = 'unisolated' if sensor.is_isolating else 'isolated'
-            LOGGER.info(f"sensor {sensor.id}:{sensor.hostname} is currently {state}. Changing state to: {desired_state}")
+            state = "isolated" if sensor.is_isolating else "unisolated"
+            desired_state = "unisolated" if sensor.is_isolating else "isolated"
+            LOGGER.info(
+                f"sensor {sensor.id}:{sensor.hostname} is currently {state}. Changing state to: {desired_state}"
+            )
             if sensor.is_isolating:
                 result = sensor.unisolate()
             else:
                 result = sensor.isolate()
             if result:
-                state = 'isolated' if sensor.is_isolating else 'unisolated'
+                state = "isolated" if sensor.is_isolating else "unisolated"
                 LOGGER.info(f"successfully {state} sensor {sensor.id}:{sensor.hostname}")
             else:
-                state = 'unisolate' if sensor.is_isolating else 'isolate'
+                state = "unisolate" if sensor.is_isolating else "isolate"
                 LOGGER.error(f"failed to {state} sensor {sensor.id}:{sensor.hostname}")
 
         # Put File #

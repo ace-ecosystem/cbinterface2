@@ -11,6 +11,7 @@ from cbapi.response import CbResponseAPI, Process
 
 LOGGER = logging.getLogger("cbinterface.query")
 
+
 def logon_history(cb: CbResponseAPI, hostname_or_username_query):
     """Given hostname or username, enumerate logon history.
 
@@ -19,7 +20,7 @@ def logon_history(cb: CbResponseAPI, hostname_or_username_query):
     """
     from cbinterface.query import make_process_query
 
-    if not (hostname_or_username_query.startswith('hostname:') or hostname_or_username_query.startswith('username:')):
+    if not (hostname_or_username_query.startswith("hostname:") or hostname_or_username_query.startswith("username:")):
         LOGGER.error(f"Must supply 'hostname:' or 'username:' field and value.")
         return False
 
@@ -30,7 +31,7 @@ def logon_history(cb: CbResponseAPI, hostname_or_username_query):
         print("\n\tEastern Time    \t|\tUsername\t|\tHostname")
         for proc in processes:
             start_time = str(proc.start)
-            start_time = start_time[:start_time.rfind('.')] + " UTC"
+            start_time = start_time[: start_time.rfind(".")] + " UTC"
             print("  {}\t    {}\t\t{}".format(start_time, proc.username, proc.hostname))
         print()
     return
