@@ -4,19 +4,20 @@ Example, enumerating USB activity on a sensor from a programatic
 analysis of registry modifications.
 """
 
-import datetime
 import logging
-from dateutil import tz
-from cbapi.response import CbResponseAPI, Process
 
-LOGGER = logging.getLogger("cbinterface.query")
+from cbapi.response import CbResponseAPI
+
+LOGGER = logging.getLogger("cbinterface.enumerations")
 
 
-def logon_history(cb: CbResponseAPI, hostname_or_username_query):
+def logon_history(cb: CbResponseAPI, hostname_or_username_query) -> None:
     """Given hostname or username, enumerate logon history.
 
     Note, this is an analysis of the WINDOWS behavior when a new user
     session is started. It's informative for analysts, not authoritative.
+    It will NOT show processes ran under other users, as often is the case
+    with enterprise admin activity.
     """
     from cbinterface.query import make_process_query
 

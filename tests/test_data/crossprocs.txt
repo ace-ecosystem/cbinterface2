@@ -1,0 +1,5 @@
+------ CROSSPROCS ------
+ @2021-02-10 18:54:14.341000: ProcessOpen | c:\windows\system32\conhost.exe -> c:\windows\system32\wbem\wmic.exe | 00007c6f-0000-06ec-01d6-ffde20456652-000000000001 -> 00007c6f-0000-0a28-01d6-ffde20451832
+ @2021-02-10 18:54:14.501000: ProcessOpen | c:\windows\system32\lsass.exe -> c:\windows\system32\wbem\wmic.exe | 00007c6f-0000-02cc-01d6-ffdd0aba2920-000000000001 -> 00007c6f-0000-0a28-01d6-ffde20451832
+ @2021-02-10 18:54:14.506000: ProcessOpen | c:\windows\system32\svchost.exe -> c:\windows\system32\wbem\wmic.exe | 00007c6f-0000-030c-01d6-ffdd0b149d60-000000000001 -> 00007c6f-0000-0a28-01d6-ffde20451832
+

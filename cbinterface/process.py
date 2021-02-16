@@ -1,6 +1,8 @@
 """Everthing process related.
 """
 
+import json
+import inspect
 import logging
 
 from io import StringIO
@@ -51,11 +53,29 @@ def process_to_dict(p: Process, max_segments=None) -> Dict:
 
 
 def cb_event_to_dict(cbevent: models.CbEvent) -> Dict:
-    """Convert a single CbEvent to dict."""
+    """Convert a single CbEvent to dict.
+
+    Get the default fields and enumerate some more.
+    """
+
+    def _is_jsonable(item):
+        try:
+            json.dumps(item)
+            return True
+        except (TypeError, OverflowError):
+            return False
+
     data = {}
     data["event_type"] = cbevent.event_type
     for title in cbevent.stat_titles:
         data[title] = str(getattr(cbevent, title, ""))
+
+    all_members = [member for member in inspect.getmembers(cbevent) if not member[0].startswith('_')]
+    members = [member for member in all_members if not inspect.ismethod(member[1]) and not inspect.isclass(member[1])]
+    for title, attribute in members:
+        if title not in data and _is_jsonable(attribute):
+            data[title] = attribute
+
     return data
 
 
@@ -110,7 +130,10 @@ def print_process_info(proc: Process, return_string: bool = False, raw_print=Fal
         txt += f"  Hostname: {proc.hostname}\n"
         txt += f"  Username: {proc.username}\n"
         txt += f"  Start Time: {proc.start}\n"  # .format(as_configured_timezone(proc.start)))
-        txt += f"  Last Update Time: {proc.last_update}\n"
+        try:
+            txt += f"  Last Update Time: {proc.last_update}\n"
+        except TypeError: # should be handled by cbapi
+            txt += f"  Last Update Time: None\n"
         txt += f"  Sensor ID: {proc.sensor_id}\n"
         txt += f"  Comms IP: {proc.comms_ip}\n"
         txt += f"  Interface IP: {proc.interface_ip}\n"
@@ -375,7 +398,7 @@ def print_childprocs(p: Process, current_segment_only: bool = False, raw_print=F
         childprocs = p.all_childprocs()
 
     try:
-        _print_childproc_events(p.childprocs)
+        _print_childproc_events(childprocs)
         """
         for cp in p.children:
             print(f" @{cp.timestamp}: {cp.path} md5={cp.md5} pid={cp.pid} - {cp.procguid}")

@@ -4,14 +4,16 @@
 import datetime
 import logging
 from dateutil import tz
+
 from cbapi.response import CbResponseAPI, Process
+from cbapi.response.models import ProcessQuery
 
 LOGGER = logging.getLogger("cbinterface.query")
 
 
 def make_process_query(
     cb: CbResponseAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
-):
+) -> ProcessQuery:
     """Query the CbResponse environment and interface results.
 
     Args:

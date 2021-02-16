@@ -1,0 +1,6 @@
+------ NETCONNS ------
+ @2021-02-10 18:54:18.617000: (Outbound) local_ip_port=10.21.21.110:49298 remote_ip_port=148.72.71.155:443 domain=fffcircle.com
+ @2021-02-10 18:54:18.672000: (Outbound) local_ip_port=10.21.21.110:49299 remote_ip_port=107.178.101.250:443 domain=jnplbd.com
+ @2021-02-10 18:54:20.163000: (Outbound) local_ip_port=10.21.21.110:49303 remote_ip_port=178.157.15.159:443 domain=3hd.com.tr
+ @2021-02-10 18:54:21.377000: (Outbound) local_ip_port=10.21.21.110:49304 remote_ip_port=23.12.144.137:80 domain=crl.identrust.com
+

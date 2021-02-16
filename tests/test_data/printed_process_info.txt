@@ -1,0 +1,18 @@
+------ INFO ------
+  Process GUID: 00007c6f-0000-0a28-01d6-ffde20451832
+  Process Name: wmic.exe
+  Process PID: 2600
+  Process MD5: fd902835deaef4091799287736f3a028
+  Process Path: c:\windows\system32\wbem\wmic.exe
+  Process Status: Terminated
+  Command Line: wmic os get /format:"C:\Users\pickledude\AppData\Roaming\24B96.xsl"
+  Parent Name: wmiprvse.exe
+  Parent GUID: 00007c6f-0000-0900-01d6-ffdd0d6e4ca0
+  Hostname: RETM5FS
+  Username: RETM5FS\pickledude
+  Start Time: 2021-02-10 18:54:14.323000
+  Last Update Time: 2021-02-10 18:54:28.984000
+  Sensor ID: 31855
+  Comms IP: 54.204.94.113
+  Interface IP: 10.21.21.110
+  GUI Link: https://fakehost/#analyze/00007c6f-0000-0a28-01d6-ffde20451832/1

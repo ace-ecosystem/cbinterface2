@@ -1,0 +1,10 @@
+------ FILEMODS ------
+ @2021-02-10 18:54:21.382000: CreatedFile c:\users\pickledude\appdata\locallow\microsoft\cryptneturlcache\metadata\644b8874112055b5e195ecb0e8f243a4
+ @2021-02-10 18:54:21.382000: CreatedFile c:\users\pickledude\appdata\locallow\microsoft\cryptneturlcache\content\644b8874112055b5e195ecb0e8f243a4
+ @2021-02-10 18:54:21.382000: FirstWrote c:\users\pickledude\appdata\locallow\microsoft\cryptneturlcache\metadata\644b8874112055b5e195ecb0e8f243a4
+ @2021-02-10 18:54:21.383000: FirstWrote c:\users\pickledude\appdata\locallow\microsoft\cryptneturlcache\content\644b8874112055b5e195ecb0e8f243a4
+ @2021-02-10 18:54:21.589000: CreatedFile c:\users\pickledude\appdata\local\microsoft\windows\temporary internet files\content.ie5\rutpyy53\osuj3zotr[1].php
+ @2021-02-10 18:54:21.589000: FirstWrote c:\users\pickledude\appdata\local\microsoft\windows\temporary internet files\content.ie5\rutpyy53\osuj3zotr[1].php
+ @2021-02-10 18:54:21.592000: CreatedFile c:\windows\temp\ikmj5.dll
+ @2021-02-10 18:54:21.592000: FirstWrote c:\windows\temp\ikmj5.dll
+

@@ -1,0 +1,4 @@
+------ Process Execution Tree ------
+
+  wmic os get /format:"C:\Users\pickledude\AppData\Roaming\24B96.xsl"  | 00007c6f-0000-0a28-01d6-ffde20451832
+

@@ -1,0 +1,22 @@
+------ REGMODS ------
+ @2021-02-10 18:54:18.601000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\zonemap\proxybypass
+ @2021-02-10 18:54:18.601000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\zonemap\intranetname
+ @2021-02-10 18:54:18.601000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\zonemap\uncasintranet
+ @2021-02-10 18:54:18.601000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\zonemap\autodetect
+ @2021-02-10 18:54:18.608000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\proxyenable
+ @2021-02-10 18:54:18.608000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\proxyserver
+ @2021-02-10 18:54:18.608000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\connections\savedlegacysettings
+ @2021-02-10 18:54:18.609000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\5.0\cache\content\cacheprefix
+ @2021-02-10 18:54:18.610000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\5.0\cache\cookies\cacheprefix
+ @2021-02-10 18:54:18.610000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\5.0\cache\history\cacheprefix
+ @2021-02-10 18:54:18.615000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\0a-c9-db-09-2c-11\wpaddecisionreason
+ @2021-02-10 18:54:18.615000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\0a-c9-db-09-2c-11\wpaddecisiontime
+ @2021-02-10 18:54:18.616000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\0a-c9-db-09-2c-11\wpaddecision
+ @2021-02-10 18:54:18.616000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\0a-c9-db-09-2c-11\wpaddetectedurl
+ @2021-02-10 18:54:18.646000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001_classes\local settings\muicache\167\52c64b7e\languagelist
+ @2021-02-10 18:54:20.887000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\{6c416599-d2f0-402e-8de7-0953557a418c}\wpaddecisionreason
+ @2021-02-10 18:54:20.887000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\{6c416599-d2f0-402e-8de7-0953557a418c}\wpaddecisiontime
+ @2021-02-10 18:54:20.887000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\{6c416599-d2f0-402e-8de7-0953557a418c}\wpaddecision
+ @2021-02-10 18:54:20.887000: FirstWrote \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\{6c416599-d2f0-402e-8de7-0953557a418c}\wpadnetworkname
+ @2021-02-10 18:54:20.887000: DeletedValue \registry\user\s-1-5-21-1660022851-2357930215-3100199371-1001\software\microsoft\windows\currentversion\internet settings\wpad\0a-c9-db-09-2c-11\wpaddetectedurl
+
