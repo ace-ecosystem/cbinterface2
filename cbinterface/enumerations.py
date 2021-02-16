@@ -13,6 +13,7 @@ from cbinterface.helpers import as_configured_timezone
 
 LOGGER = logging.getLogger("cbinterface.enumerations")
 
+
 def logon_history(cb: CbResponseAPI, hostname_or_username_query) -> None:
     """Given hostname or username, enumerate logon history.
 

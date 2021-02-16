@@ -389,7 +389,9 @@ def print_childprocs(p: Process, current_segment_only: bool = False, raw_print=F
             except ObjectNotFoundError:
                 LOGGER.debug(f"child process not found. ")
 
-            print(f" @{as_configured_timezone(spawn.timestamp)}: ({status}) {spawn.path} md5={spawn.md5} pid={spawn.pid} - {cp_guid}")
+            print(
+                f" @{as_configured_timezone(spawn.timestamp)}: ({status}) {spawn.path} md5={spawn.md5} pid={spawn.pid} - {cp_guid}"
+            )
         print()
 
     print("------ CHILDPROCS ------")

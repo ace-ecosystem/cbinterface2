@@ -66,6 +66,7 @@ from cbinterface.enumerations import logon_history
 
 LOGGER = logging.getLogger("cbinterface.cli")
 
+
 def input_with_timeout(prompt, default=None, timeout=30):
     """Wait up to timeout for user input"""
 
@@ -81,10 +82,12 @@ def input_with_timeout(prompt, default=None, timeout=30):
     signal.alarm(0)
     return answer
 
+
 def clean_exit(signal, frame):
     print()
     LOGGER.info(f"caught KeyboardInterrupt. exiting.")
     sys.exit(0)
+
 
 def main():
     """Main entry point for cbinterface."""
@@ -124,7 +127,6 @@ def main():
         action="store",
         help='configure your default timezone. ex. "US/Eastern" or "Europe/Rome"',
     )
-    
 
     subparsers = parser.add_subparsers(dest="command")
 
