@@ -13,6 +13,8 @@ from typing import Generator, List, Dict
 from cbapi.response import Process, models
 from cbapi.errors import ObjectNotFoundError
 
+from cbinterface.helpers import as_configured_timezone
+
 LOGGER = logging.getLogger("cbinterface.process")
 
 
@@ -70,7 +72,7 @@ def cb_event_to_dict(cbevent: models.CbEvent) -> Dict:
     for title in cbevent.stat_titles:
         data[title] = str(getattr(cbevent, title, ""))
 
-    all_members = [member for member in inspect.getmembers(cbevent) if not member[0].startswith('_')]
+    all_members = [member for member in inspect.getmembers(cbevent) if not member[0].startswith("_")]
     members = [member for member in all_members if not inspect.ismethod(member[1]) and not inspect.isclass(member[1])]
     for title, attribute in members:
         if title not in data and _is_jsonable(attribute):
@@ -129,10 +131,10 @@ def print_process_info(proc: Process, return_string: bool = False, raw_print=Fal
         txt += f"  Parent GUID: {proc.parent_id}\n"
         txt += f"  Hostname: {proc.hostname}\n"
         txt += f"  Username: {proc.username}\n"
-        txt += f"  Start Time: {proc.start}\n"  # .format(as_configured_timezone(proc.start)))
+        txt += f"  Start Time: {as_configured_timezone(proc.start)}\n"
         try:
-            txt += f"  Last Update Time: {proc.last_update}\n"
-        except TypeError: # should be handled by cbapi
+            txt += f"  Last Update Time: {as_configured_timezone(proc.last_update)}\n"
+        except TypeError:  # should be handled by cbapi
             txt += f"  Last Update Time: None\n"
         txt += f"  Sensor ID: {proc.sensor_id}\n"
         txt += f"  Comms IP: {proc.comms_ip}\n"
@@ -149,7 +151,7 @@ def print_ancestry(p: Process):
 
     def _print_ancestry_details(p, depth):
         suspressed = " (suppressed) " if p.suppressed_process else " "
-        print(f"{'  '*(depth + 1)}{p.start or '<unknown>'}:  {p.cmdline}{suspressed} | {p.id}")
+        print(f"{'  '*(depth + 1)}{as_configured_timezone(p.start) or '<unknown>'}:  {p.cmdline}{suspressed} | {p.id}")
 
     print("------ Process Ancestry ------")
     print()
@@ -239,7 +241,7 @@ def print_filemods(p: Process, current_segment_only: bool = False, raw_print=Fal
             if raw_print:
                 print(fm)
                 continue
-            detail_line = f" @{fm.timestamp}: {fm.type} {fm.path}"
+            detail_line = f" @{as_configured_timezone(fm.timestamp)}: {fm.type} {fm.path}"
             if fm.filetype != "Unknown":
                 detail_line += f" - type:{fm.filetype}"
             if fm.md5:
@@ -264,7 +266,7 @@ def print_netconns(p: Process, current_segment_only: bool = False, raw_print=Fal
             if raw_print:
                 print(nc)
                 continue
-            detail_line = f" @{nc.timestamp}: ({nc.direction}) local_ip_port={nc.local_ip}:{nc.local_port}"
+            detail_line = f" @{as_configured_timezone(nc.timestamp)}: ({nc.direction}) local_ip_port={nc.local_ip}:{nc.local_port}"
             if nc.proxy_ip != "0.0.0.0":
                 detail_line += f" proxy_ip_port={nc.proxy_ip}:{nc.proxy_port}"
             detail_line += f" remote_ip_port={nc.remote_ip}:{nc.remote_port} domain={nc.domain}"
@@ -288,7 +290,7 @@ def print_regmods(p: Process, current_segment_only: bool = False, raw_print=Fals
             if raw_print:
                 print(rm)
                 continue
-            print(f" @{rm.timestamp}: {rm.type} {rm.path}")
+            print(f" @{as_configured_timezone(rm.timestamp)}: {rm.type} {rm.path}")
         print()
 
     print("------ REGMODS ------")
@@ -309,7 +311,7 @@ def print_modloads(p: Process, current_segment_only: bool = False, raw_print=Fal
                 print(ml)
                 continue
             sig_status = "signed" if ml.is_signed else "unsigned"
-            print(f" @{ml.timestamp}: ({sig_status}) {ml.path} , md5:{ml.md5}")
+            print(f" @{as_configured_timezone(ml.timestamp)}: ({sig_status}) {ml.path} , md5:{ml.md5}")
         print()
 
     print("------ MODLOADS ------")
@@ -330,7 +332,7 @@ def print_crossprocs(p: Process, current_segment_only: bool = False, raw_print=F
                 print(cp)
                 continue
             print(
-                f" @{cp.timestamp}: {cp.type} | {cp.source_path} -> {cp.target_path} | {cp.source_proc.id} -> {cp.target_proc.id}"
+                f" @{as_configured_timezone(cp.timestamp)}: {cp.type} | {cp.source_path} -> {cp.target_path} | {cp.source_proc.id} -> {cp.target_proc.id}"
             )
             # print() # extra space seems to be helpful on the eye with these
         print()
@@ -387,7 +389,7 @@ def print_childprocs(p: Process, current_segment_only: bool = False, raw_print=F
             except ObjectNotFoundError:
                 LOGGER.debug(f"child process not found. ")
 
-            print(f" @{spawn.timestamp}: ({status}) {spawn.path} md5={spawn.md5} pid={spawn.pid} - {cp_guid}")
+            print(f" @{as_configured_timezone(spawn.timestamp)}: ({status}) {spawn.path} md5={spawn.md5} pid={spawn.pid} - {cp_guid}")
         print()
 
     print("------ CHILDPROCS ------")
@@ -401,7 +403,7 @@ def print_childprocs(p: Process, current_segment_only: bool = False, raw_print=F
         _print_childproc_events(childprocs)
         """
         for cp in p.children:
-            print(f" @{cp.timestamp}: {cp.path} md5={cp.md5} pid={cp.pid} - {cp.procguid}")
+            print(f" @{as_configured_timezone(cp.timestamp)}: {cp.path} md5={cp.md5} pid={cp.pid} - {cp.procguid}")
         print()
         """
     except Exception as e:

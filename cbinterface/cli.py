@@ -41,6 +41,7 @@ from cbinterface.sessions import (
     get_command_result,
     get_file_content,
 )
+from cbinterface.config import set_timezone, save_configuration
 from cbinterface.commands import (
     PutFile,
     ProcessListing,
@@ -60,11 +61,10 @@ from cbinterface.commands import (
     CreateRegKey,
     GetSystemMemoryDump,
 )
-
 from cbinterface.enumerations import logon_history
 
-LOGGER = logging.getLogger("cbinterface.cli")
 
+LOGGER = logging.getLogger("cbinterface.cli")
 
 def input_with_timeout(prompt, default=None, timeout=30):
     """Wait up to timeout for user input"""
@@ -81,12 +81,10 @@ def input_with_timeout(prompt, default=None, timeout=30):
     signal.alarm(0)
     return answer
 
-
 def clean_exit(signal, frame):
     print()
     LOGGER.info(f"caught KeyboardInterrupt. exiting.")
     sys.exit(0)
-
 
 def main():
     """Main entry point for cbinterface."""
@@ -121,6 +119,12 @@ def main():
         action="store",
         help='specify the timezone to override defaults. ex. "US/Eastern" or "Europe/Rome"',
     )
+    parser.add_argument(
+        "--set-default-timezone",
+        action="store",
+        help='configure your default timezone. ex. "US/Eastern" or "Europe/Rome"',
+    )
+    
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -349,6 +353,13 @@ def main():
 
     if args.debug:
         coloredlogs.install(level="DEBUG", logger=logging.getLogger())
+
+    if args.time_zone:
+        set_timezone(args.time_zone)
+
+    if args.set_default_timezone:
+        set_timezone(args.set_default_timezone)
+        save_configuration()
 
     # XXX create custom wrapper that will catch timeout errors?
     # catch this raise cbapi/connection.py#L266

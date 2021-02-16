@@ -7,6 +7,8 @@ from dateutil import tz
 from cbapi.response import CbResponseAPI, Sensor
 from cbapi.response.models import SensorQuery
 
+from cbinterface.helpers import as_configured_timezone
+
 LOGGER = logging.getLogger("cbinterface.sensor")
 
 
@@ -61,8 +63,8 @@ def sensor_info(sensor: Sensor):
     text += f"\tstatus: {sensor.status}\n"
     text += f"\tis_isolating: {sensor.is_isolating}\n"
     text += f"\tsensor_id: {sensor.id}\n"
-    text += f"\tlast_checkin_time: {sensor.last_checkin_time}\n"
-    text += f"\tnext_checkin_time: {sensor.next_checkin_time}\n"
+    text += f"\tlast_checkin_time: {as_configured_timezone(sensor.last_checkin_time)}\n"
+    text += f"\tnext_checkin_time: {as_configured_timezone(sensor.next_checkin_time)}\n"
     text += f"\tsensor_health_message: {sensor.sensor_health_message}\n"
     text += f"\tsensor_health_status: {sensor.sensor_health_status}\n"
     text += "\tnetwork_interfaces:\n"

@@ -8,6 +8,8 @@ from contextlib import redirect_stdout
 from cbapi.response import CbResponseAPI, Process
 from cbapi.errors import ObjectNotFoundError
 
+from cbinterface.config import set_timezone
+
 HOME_PATH = os.path.dirname(os.path.abspath(__file__))
 
 @pytest.fixture(autouse=True)
@@ -124,6 +126,9 @@ def get_process(monkeypatch):
         else:
             parent_proc.walk_parents(callback, max_depth=max_depth, depth=depth+1)
 
+    # set default timezone to GMT
+    set_timezone('GMT')
+
     initial_data = {}
     cb = fake_cb_response_api(monkeypatch)
     
@@ -229,7 +234,6 @@ def test_print_process_ancestry(monkeypatch):
     expected_output = ""
     with open(f'{HOME_PATH}/test_data/ancestry_str.txt', 'r') as fp:
         expected_output = fp.read()
-
     results = StringIO()
     with redirect_stdout(results):
         print_ancestry(proc)
@@ -327,3 +331,11 @@ def test_process_to_dict(monkeypatch):
     
     results = process_to_dict(proc)
     assert isinstance(results, dict)
+
+def test_configured_timezone(monkeypatch):
+    from cbinterface.helpers import as_configured_timezone
+    proc = get_process(monkeypatch)
+    set_timezone('GMT')
+    assert "2021-02-10 18:54:14.323000+0000" == as_configured_timezone(proc.start)
+    set_timezone('US/Eastern')
+    assert "2021-02-10 13:54:14.323000-0500" == as_configured_timezone(proc.start)

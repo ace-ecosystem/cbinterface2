@@ -10,8 +10,8 @@
   Parent GUID: 00007c6f-0000-0900-01d6-ffdd0d6e4ca0
   Hostname: RETM5FS
   Username: RETM5FS\pickledude
-  Start Time: 2021-02-10 18:54:14.323000
-  Last Update Time: 2021-02-10 18:54:28.984000
+  Start Time: 2021-02-10 18:54:14.323000+0000
+  Last Update Time: 2021-02-10 18:54:28.984000+0000
   Sensor ID: 31855
   Comms IP: 54.204.94.113
   Interface IP: 10.21.21.110

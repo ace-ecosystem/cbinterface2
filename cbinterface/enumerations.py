@@ -3,13 +3,15 @@
 Example, enumerating USB activity on a sensor from a programatic
 analysis of registry modifications.
 """
-
+import os
 import logging
 
 from cbapi.response import CbResponseAPI
 
-LOGGER = logging.getLogger("cbinterface.enumerations")
+from cbinterface.helpers import as_configured_timezone
 
+
+LOGGER = logging.getLogger("cbinterface.enumerations")
 
 def logon_history(cb: CbResponseAPI, hostname_or_username_query) -> None:
     """Given hostname or username, enumerate logon history.
@@ -29,10 +31,10 @@ def logon_history(cb: CbResponseAPI, hostname_or_username_query) -> None:
 
     processes = make_process_query(cb, query)
     if processes and len(processes) > 0:
-        print("\n\tEastern Time    \t|\tUsername\t|\tHostname")
+        timezone_string = os.environ.get("CBINTERFACE_TIMEZONE", "GMT")
+        print(f"\n\t{timezone_string} Time    \t|\tUsername\t|\tHostname")
         for proc in processes:
-            start_time = str(proc.start)
-            start_time = start_time[: start_time.rfind(".")] + " UTC"
+            start_time = as_configured_timezone(proc.start, apply_time_format="%Y-%m-%d %H:%M:%S%z")
             print("  {}\t    {}\t\t{}".format(start_time, proc.username, proc.hostname))
         print()
     return
