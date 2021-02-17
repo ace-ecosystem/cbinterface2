@@ -3,7 +3,7 @@
 
 import datetime
 import logging
-from dateutil import tz
+
 from cbapi.response import CbResponseAPI, Sensor
 from cbapi.response.models import SensorQuery
 
@@ -48,6 +48,8 @@ def find_sensor_by_hostname(cb: CbResponseAPI, hostname: str) -> Sensor:
 
 
 def sensor_info(sensor: Sensor):
+    from cbinterface.helpers import utc_offset_to_potential_tz_names
+
     text = "\n"
     text += f"Sensor object - {sensor.webui_link}\n"
     text += "-------------------------------------------------------------------------------\n"
@@ -63,6 +65,11 @@ def sensor_info(sensor: Sensor):
     text += f"\tstatus: {sensor.status}\n"
     text += f"\tis_isolating: {sensor.is_isolating}\n"
     text += f"\tsensor_id: {sensor.id}\n"
+    potential_tz_names = utc_offset_to_potential_tz_names(sensor.last_checkin_time.tzinfo._offset)
+    potential_regions = f"{len(potential_tz_names)} potential regions."
+    if len(potential_tz_names) == 1:
+        potential_regions = potential_tz_names[0]
+    text += f"\tsensor_timezone: GMT{sensor.last_checkin_time.strftime('%z')} - {potential_regions}\n"
     text += f"\tlast_checkin_time: {as_configured_timezone(sensor.last_checkin_time)}\n"
     text += f"\tnext_checkin_time: {as_configured_timezone(sensor.next_checkin_time)}\n"
     text += f"\tsensor_health_message: {sensor.sensor_health_message}\n"

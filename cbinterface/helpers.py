@@ -9,6 +9,8 @@ import datetime
 from pathlib import PureWindowsPath, PurePosixPath
 from typing import Union
 
+from dateutil import tz
+from dateutil.zoneinfo import get_zonefile_instance
 
 LOGGER = logging.getLogger("cbinterface.helpers")
 
@@ -31,7 +33,6 @@ def get_os_independant_filepath(unknown_os_file_path: str) -> Union[PureWindowsP
 
 def as_configured_timezone(timestamp: Union[datetime.datetime, str], apply_time_format="%Y-%m-%d %H:%M:%S.%f%z") -> str:
     """Convert timestamp to the configured time zone."""
-    from dateutil import tz
     from cbinterface.config import get_timezone
 
     if isinstance(timestamp, str):
@@ -44,3 +45,14 @@ def as_configured_timezone(timestamp: Union[datetime.datetime, str], apply_time_
     # the timestamps from CbR are not timezone aware, but they are GMT.
     timestamp = timestamp.replace(tzinfo=tz.gettz("GMT")) if timestamp.tzinfo is None else timestamp
     return timestamp.astimezone(get_timezone()).strftime(apply_time_format)
+
+
+def utc_offset_to_potential_tz_names(utc_offset: datetime.timedelta):
+    potential_zones = []
+    utc_now = datetime.datetime.utcnow()
+    for zone in list(get_zonefile_instance().zones):
+        dt = utc_now.astimezone(tz.gettz(zone))
+        if dt.utcoffset() == utc_offset:
+            potential_zones.append(zone)
+
+    return list(sorted(potential_zones))

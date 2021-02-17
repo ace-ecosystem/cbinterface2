@@ -169,7 +169,7 @@ def test_fake_cb(monkeypatch):
 def test_version():
     from cbinterface import __version__
 
-    assert __version__ == "2.0.3"
+    assert __version__ == "2.0.4"
 
 
 def test_make_cb_response_query(monkeypatch):
@@ -371,3 +371,13 @@ def test_configured_timezone(monkeypatch):
     assert "2021-02-10 18:54:14.323000+0000" == as_configured_timezone(proc.start)
     set_timezone("US/Eastern")
     assert "2021-02-10 13:54:14.323000-0500" == as_configured_timezone(proc.start)
+
+
+def test_utc_offset_to_potential_tz_names():
+    from datetime import timedelta
+    from cbinterface.helpers import utc_offset_to_potential_tz_names
+
+    zones = utc_offset_to_potential_tz_names(timedelta(hours=5, minutes=30))
+    assert len(zones) == 3
+    zones = utc_offset_to_potential_tz_names(timedelta(hours=-5))
+    assert len(zones) == 47

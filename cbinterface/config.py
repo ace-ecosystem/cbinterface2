@@ -32,8 +32,14 @@ MAX_RECURSIVE_DEPTH = CONFIG.getint("default", "max_recursive_depth")
 
 def save_configuration(config: ConfigParser = CONFIG, save_path=user_config_path):
     """Write config to save_path."""
-    with open(save_path, "w") as fp:
-        config.write(fp)
+    if save_path == user_config_path:
+        if not os.path.exists(user_config_path):
+            os.mkdir(os.path.join(os.path.expanduser("~"), ".carbonblack"))
+    try:
+        with open(save_path, "w") as fp:
+            config.write(fp)
+    except FileNotFoundError:
+        LOGGER.error(f"part of path does not exist: {save_path}")
     if os.path.exists(save_path):
         LOGGER.info(f"saved configuration to: {save_path}")
 
