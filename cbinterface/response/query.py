@@ -5,6 +5,8 @@ import datetime
 import logging
 from dateutil import tz
 
+from typing import Union
+
 from cbapi.response import CbResponseAPI, Process
 from cbapi.response.models import ProcessQuery
 
@@ -24,6 +26,7 @@ def make_process_query(
         XXX no_warnings: Do not warn before printing large query result sets.
     Returns: cbapi.response.models.ProcessQuery or empty list.
     """
+
     processes = []
     LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
     try:

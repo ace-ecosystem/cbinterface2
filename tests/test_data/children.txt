@@ -1,3 +1,3 @@
 ------ CHILDPROCS ------
- @1970-01-01 00:00:00: (running) c:\windows\system32\rundll32.exe md5=dd81d91ff3b0763c392422865c9ac12e pid=1928 - 00007c6f-0000-0788-01d6-ffde249c8b72
+ @1970-01-01 00:00:00.000000+0000: (running) c:\windows\system32\rundll32.exe md5=dd81d91ff3b0763c392422865c9ac12e pid=1928 - 00007c6f-0000-0788-01d6-ffde249c8b72
 

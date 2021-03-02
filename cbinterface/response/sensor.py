@@ -4,6 +4,8 @@
 import datetime
 import logging
 
+from typing import Union
+
 from cbapi.response import CbResponseAPI, Sensor
 from cbapi.response.models import SensorQuery
 

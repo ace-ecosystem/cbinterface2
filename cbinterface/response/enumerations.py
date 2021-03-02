@@ -22,7 +22,7 @@ def logon_history(cb: CbResponseAPI, hostname_or_username_query) -> None:
     It will NOT show processes ran under other users, as often is the case
     with enterprise admin activity.
     """
-    from cbinterface.query import make_process_query
+    from cbinterface.response.query import make_process_query
 
     if not (hostname_or_username_query.startswith("hostname:") or hostname_or_username_query.startswith("username:")):
         LOGGER.error(f"Must supply 'hostname:' or 'username:' field and value.")

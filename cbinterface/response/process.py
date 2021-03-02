@@ -1,4 +1,4 @@
-"""Everthing process related.
+"""Everthing response process related.
 """
 
 import json
@@ -15,7 +15,7 @@ from cbapi.errors import ObjectNotFoundError
 
 from cbinterface.helpers import as_configured_timezone
 
-LOGGER = logging.getLogger("cbinterface.process")
+LOGGER = logging.getLogger("cbinterface.response.process")
 
 
 def process_to_dict(p: Process, max_segments=None) -> Dict:

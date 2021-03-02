@@ -313,7 +313,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
         dump_object.delete()
 
     def process_result(self):
-        from cbinterface.sessions import get_command_result
+        from cbinterface.response.sessions import get_command_result
 
         # should only make it here if an error was not raise
         # check to see if the command has success status with server
@@ -507,7 +507,7 @@ class RecursiveKillProcessByName(BaseSessionCommand):
 
     def run(self, session: LiveResponseSession):
         from cbinterface.helpers import get_os_independant_filepath
-        from cbinterface.sessions import CustomLiveResponseSessionManager
+        from cbinterface.response.sessions import CustomLiveResponseSessionManager
 
         self.local_session_manager = CustomLiveResponseSessionManager(session._cb)
         for process in session.list_processes():

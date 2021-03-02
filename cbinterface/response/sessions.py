@@ -13,8 +13,8 @@ from cbapi.live_response_api import CbLRManagerBase, LiveResponseJobScheduler, W
 
 from typing import List, Union
 
-from cbinterface.sensor import is_sensor_online
-from cbinterface.commands import BaseSessionCommand
+from cbinterface.response.sensor import is_sensor_online
+from cbinterface.response.commands import BaseSessionCommand
 
 LOGGER = logging.getLogger("cbinterface.session")
 

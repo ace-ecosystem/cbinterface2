@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cbinterface"
-version = "2.0.4"
+version = "2.1.0"
 description = "command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions"
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 license = "Apache-2.0"
@@ -17,6 +17,7 @@ argcomplete = "^1.12.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+pytest-mock = "^3.5.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

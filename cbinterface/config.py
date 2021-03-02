@@ -29,7 +29,6 @@ if not CONFIG.has_option("default", "max_recursive_depth"):
 MAX_RECURSIVE_DEPTH = CONFIG.getint("default", "max_recursive_depth")
 # TODO need to actually use max recursive depth and max segments
 
-
 def save_configuration(config: ConfigParser = CONFIG, save_path=user_config_path):
     """Write config to save_path."""
     if save_path == user_config_path:
@@ -50,7 +49,7 @@ def _is_valid_time_zone(zone: str):
         return True
     return False
 
-
+# begin cbinterface timezone
 def set_timezone(time_zone: str):
     if not _is_valid_time_zone(time_zone):
         LOGGER.error(f"Not a recongnized time zone: {time_zone}")
@@ -59,11 +58,33 @@ def set_timezone(time_zone: str):
     CONFIG.set("default", "time_zone", time_zone)
     return True
 
-
 def get_timezone():
     return tz.gettz(os.environ.get("CBINTERFACE_TIMEZONE", "GMT"))
-
 
 if "CBINTERFACE_TIMEZONE" not in os.environ:
     # timestamps from Cb are not timezone aware, but they are GMT.
     set_timezone(CONFIG.get("default", "time_zone", fallback="GMT"))
+
+# begin CbAPI product
+def set_default_cbapi_product(env_product: str):
+    os.environ["CBINTERFACE_DEFAULT_CBAPI_PRODUCT"] = env_product
+    CONFIG.set("default", "cbapi_product", env_product)
+    return True
+
+def get_default_cbapi_product():
+    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "response")
+
+if "CBINTERFACE_DEFAULT_CBAPI_PRODUCT" not in os.environ:
+    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="response"))
+
+# begin CbAPI profile/environment
+def set_default_cbapi_profile(profile: str):
+    os.environ["CBINTERFACE_DEFAULT_CBAPI_PROFILE"] = profile
+    CONFIG.set("default", "cbapi_profile", profile)
+    return True
+
+def get_default_cbapi_profile():
+    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PROFILE", "default")
+
+if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
+    set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))
