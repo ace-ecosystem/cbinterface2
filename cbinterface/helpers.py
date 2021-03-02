@@ -20,13 +20,16 @@ LOGGER = logging.getLogger("cbinterface.helpers")
 UUID_REGEX = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 PSC_GUID_REGEX = re.compile(r"[0-9A-Z]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{15}", re.I)
 
+
 def is_uuid(uuid: str):
     """Returns True if the given string matches the UUID pattern."""
     return UUID_REGEX.match(uuid)
 
+
 def is_psc_guid(guid: str):
     """Returns True if the given string matches the format of a PSC GUID."""
     return PSC_GUID_REGEX.match(guid)
+
 
 def input_with_timeout(prompt, default=None, timeout=30):
     """Wait up to timeout for user input"""
@@ -48,6 +51,7 @@ def clean_exit(signal, frame):
     print()
     LOGGER.info(f"caught KeyboardInterrupt. exiting.")
     sys.exit(0)
+
 
 def get_os_independant_filepath(unknown_os_file_path: str) -> Union[PureWindowsPath, PurePosixPath]:
     """Return a proper os filepath object."""
@@ -91,6 +95,7 @@ def utc_offset_to_potential_tz_names(utc_offset: datetime.timedelta):
             potential_zones.append(zone)
 
     return list(sorted(potential_zones))
+
 
 def create_histogram_string(data: dict) -> str:
     """A convenience function that creates a graph in the form of a string.

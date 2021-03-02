@@ -1,17 +1,30 @@
-import re
-import argparse
-import datetime
-import logging
-import json
-import time
+# PYTHON_ARGCOMPLETE_OK
 
-from cbapi.response import CbResponseAPI, Process, Sensor
+import os
+import re
+import sys
+import time
+import argparse
+import argcomplete
+import logging
+import coloredlogs
+import datetime
+import json
+import signal
+import yaml
+
+import cbapi.auth
+from cbapi.psc.threathunter import CbThreatHunterAPI
+from cbapi.response import CbResponseAPI
+
+# from cbapi.response import Process, Sensor
 from cbapi.errors import ObjectNotFoundError
 
-from cbinterface.helpers import is_uuid, clean_exit, input_with_timeout
-from cbinterface.response.query import make_process_query, print_facet_histogram
-from cbinterface.response.sensor import is_sensor_online, find_sensor_by_hostname, make_sensor_query, sensor_info
-from cbinterface.response.process import (
+from cbinterface.helpers import is_uuid
+
+# from cbinterface.query import make_process_query, print_facet_histogram
+from cbinterface.sensor import is_sensor_online, find_sensor_by_hostname, make_sensor_query, sensor_info
+from cbinterface.process import (
     process_to_dict,
     inspect_process_tree,
     print_process_info,
@@ -24,7 +37,7 @@ from cbinterface.response.process import (
     print_crossprocs,
     print_childprocs,
 )
-from cbinterface.response.sessions import (
+from cbinterface.sessions import (
     CustomLiveResponseSessionManager,
     get_session_by_id,
     sensor_live_response_sessions_by_sensor_id,
@@ -33,7 +46,8 @@ from cbinterface.response.sessions import (
     get_command_result,
     get_file_content,
 )
-from cbinterface.response.commands import (
+from cbinterface.config import set_timezone, save_configuration
+from cbinterface.commands import (
     PutFile,
     ProcessListing,
     GetFile,
@@ -52,14 +66,127 @@ from cbinterface.response.commands import (
     CreateRegKey,
     GetSystemMemoryDump,
 )
-from cbinterface.response.enumerations import logon_history
-
-LOGGER = logging.getLogger("cbinterface.response.cli")
+from cbinterface.enumerations import logon_history
 
 
-def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
-    """Given an argument parser subparser, build a response specific parser."""
-    # sensor query parser
+LOGGER = logging.getLogger("cbinterface.cli")
+
+
+def input_with_timeout(prompt, default=None, timeout=30):
+    """Wait up to timeout for user input"""
+
+    def _log_and_exit(signum, frame):
+        sys.stderr.write("\n")
+        LOGGER.error("Timeout reached waiting for input.")
+        sys.exit()
+
+    signal.signal(signal.SIGALRM, _log_and_exit)
+    signal.alarm(timeout)
+    sys.stderr.write(prompt)
+    answer = input() or default
+    signal.alarm(0)
+    return answer
+
+
+def clean_exit(signal, frame):
+    print()
+    LOGGER.info(f"caught KeyboardInterrupt. exiting.")
+    sys.exit(0)
+
+
+def main():
+    """Main entry point for cbinterface."""
+
+    # configure logging #
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - [%(levelname)s] %(message)s")
+    coloredlogs.install(level="INFO", logger=logging.getLogger())
+
+    # set clean exit signal
+    signal.signal(signal.SIGINT, clean_exit)
+
+    # enumerate some Cb env settings #
+    # TODO come back and look at defining custom envtype profile element
+    # and loading from os.environ as option
+    env_map = {"response": [], "psc": []}
+    default_product = "response"
+    supported_products = [default_product, "psc"]
+    environments = []
+    for product in supported_products:
+        for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
+            environments.append(f"{product}:{profile}")
+            env_map[product].append(profile)
+
+    if not env_map[default_product]:
+        default_product = "psc"
+
+    # environments = cbapi.auth.FileCredentialStore(default_product).get_profiles()
+    default_environments = [env for env in environments if env.startswith(default_product)]
+    default_environment = (
+        f"{default_product}:default"
+        if default_environments and f"{default_product}:default" in default_environments
+        else environments[0]
+    )
+
+    parser = argparse.ArgumentParser(description="Interface to Carbon Black for IDR teams.")
+    parser.add_argument("-d", "--debug", action="store_true", help="Turn on debug logging.")
+    parser.add_argument(
+        "-e",
+        "--environment",
+        action="store",
+        choices=environments,
+        default=default_environment,
+        help=f"specify an environment to work with. Default={default_environment}",
+    )
+    parser.add_argument(
+        "-tz",
+        "--time-zone",
+        action="store",
+        help='specify the timezone to override defaults. ex. "US/Eastern" or "Europe/Rome"',
+    )
+    parser.add_argument(
+        "--set-default-timezone",
+        action="store",
+        help='configure your default timezone. ex. "US/Eastern" or "Europe/Rome"',
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    # query parser
+    parser_query = subparsers.add_parser(
+        "query", aliases=["pq", "q"], help="execute a process search query. 'query -h' for more"
+    )
+    parser_query.add_argument("query", help="the process search query you'd like to execute")
+    parser_query.add_argument(
+        "-s",
+        "--start-time",
+        action="store",
+        help="Only return processes with events after given date/time stamp\
+ (server’s clock). Format:'Y-m-d H:M:S' eastern time",
+    )
+    parser_query.add_argument(
+        "-l", "--last-time", action="store", help="Set the maximum last update time. Format:'Y-m-d H:M:S' eastern time"
+    )
+    parser_query.add_argument(
+        "-nw",
+        "--no-warnings",
+        action="store_true",
+        default=False,
+        help="Don't warn before printing large query results",
+    )
+    parser_query.add_argument(
+        "-ad",
+        "--all-details",
+        action="store_true",
+        default=False,
+        help="Print all available process info (all fields).",
+    )
+    # parser_query.add_argument('-rpe', '--raw-print-events', action='store_true', default=False,
+    #                         help="do not format Cb events onto a single line. Print them the way Cb does by default.")
+    parser_query.add_argument(
+        "--facets", action="store_true", default=None, help="Retrieve statistical facets for this query."
+    )
+
+    # sensor query (response)
     parser_sensor = subparsers.add_parser(
         "sensor-query",
         aliases=["sq"],
@@ -79,6 +206,99 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
         action="store_true",
         default=False,
         help="Print all available process info (all fields).",
+    )
+
+    # device query (psc)
+    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query (PSC).")
+    parser_sensor.add_argument("device_query", help="the device query you'd like to execute. 'FIELDS' for help.")
+    parser_sensor.add_argument(
+        "-nw",
+        "--no-warnings",
+        action="store_true",
+        default=False,
+        help="Don't warn before printing large query results",
+    )
+    parser_sensor.add_argument(
+        "-ad",
+        "--all-details",
+        action="store_true",
+        default=False,
+        help="Print all available process info (all fields).",
+    )
+
+    # process inspection parser
+    parser_inspect = subparsers.add_parser(
+        "investigate", aliases=["proc", "i"], help="Investigate process events and metadata."
+    )
+    parser_inspect.add_argument(
+        "guid_with_optional_segment", help="the process GUID/segment to inspect. Segment is optional."
+    )
+    parser_inspect.add_argument(
+        "-i", "--proc-info", dest="inspect_proc_info", action="store_true", help="show binary and process information"
+    )
+    parser_inspect.add_argument(
+        "-w",
+        "--walk-tree",
+        dest="walk_and_inspect_tree",
+        action="store_true",
+        help="Recursively walk, print, and inspect the process tree. Specified arguments (ex. filemods) applied at every process in tree. WARNING: can pull large datasets.",
+    )
+    parser_inspect.add_argument(
+        "-t",
+        "--process-tree",
+        dest="inspect_process_tree",
+        action="store_true",
+        help="print the process tree with this process as the root.",
+    )
+    parser_inspect.add_argument(
+        "-a",
+        "--process-ancestry",
+        dest="inspect_process_ancestry",
+        action="store_true",
+        help="print the the process ancestry",
+    )
+    parser_inspect.add_argument(
+        "-c",
+        "--show-children",
+        dest="inspect_children",
+        action="store_true",
+        help="only print process children event details",
+    )
+    parser_inspect.add_argument(
+        "-nc", "--netconns", dest="inspect_netconns", action="store_true", help="print network connections"
+    )
+    parser_inspect.add_argument(
+        "-fm", "--filemods", dest="inspect_filemods", action="store_true", help="print file modifications"
+    )
+    parser_inspect.add_argument(
+        "-rm", "--regmods", dest="inspect_regmods", action="store_true", help="print registry modifications"
+    )
+    # parser_inspect.add_argument('-um', '--unsigned-modloads', action='store_true',
+    #                         help="print unsigned modloads")
+    parser_inspect.add_argument(
+        "-ml", "--modloads", dest="inspect_modloads", action="store_true", help="print modloads"
+    )
+    parser_inspect.add_argument(
+        "-cp", "--crossprocs", dest="inspect_crossprocs", action="store_true", help="print crossprocs"
+    )
+    parser_inspect.add_argument(
+        "-rpe",
+        "--raw-print-events",
+        action="store_true",
+        default=False,
+        help="do not format Cb events onto a single line. Print them the way Cb does by default.",
+    )
+    # parser_inspect.add_argument('-warn', '--give-warnings', action='store_true', default=False,
+    #                         help="Warn before printing large datasets/results")
+    parser_inspect.add_argument(
+        "--json", action="store_true", help="Combine all results into json document and print the result."
+    )
+    parser_inspect.add_argument(
+        "--segment-limit",
+        action="store",
+        type=int,
+        default=None,
+        help="stop processing events into json after this many process segments",
     )
 
     # live response parser
@@ -171,24 +391,51 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
         help="given username or hostname, enumerate logon history (Windows OS).",
     )
 
+    argcomplete.autocomplete(parser)
+    args = parser.parse_args()
 
-def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> bool:
-    """The logic to execute response specific command line arguments.
-
-    Args:
-        cb: CbResponseAPI
-        args: parsed argparse namespace
-    Returns:
-        True or None on success, False on failure.
+    """
+    XXX: Create a SINGLE background daemon service that can be launched to track and manage jobs?
     """
 
-    if not isinstance(cb, CbResponseAPI):
-        LOGGER.critical(f"expected CbResponseAPI but got '{type(cb)}'")
-        return False
+    if args.debug:
+        coloredlogs.install(level="DEBUG", logger=logging.getLogger())
+
+    if args.time_zone:
+        set_timezone(args.time_zone)
+
+    if args.set_default_timezone:
+        set_timezone(args.set_default_timezone)
+        save_configuration()
+
+    # XXX create custom wrapper that will catch timeout errors?
+    # catch this raise cbapi/connection.py#L266
+    # and log an critical error instead of barffing on the terminal.
+    # ALSO catch: cbapi.errors.ServerError: Received error code 504 from API
+    product, profile = args.environment.split(":", 1)
+    if product == "response":
+        from cbapi.response import Process, Sensor
+        from cbinterface.query import make_process_query, print_facet_histogram
+
+        cb = CbResponseAPI(profile=profile)
+        # cb = CbResponseAPI(profile=profile)
+    elif product == "psc":
+        # XXX Develop a product map to map to the appropriate product models
+        from cbapi.psc.threathunter import Process
+        from cbapi.psc import Device as Sensor
+        from cbinterface.psc.query import make_process_query, print_facet_histogram
+
+        # import CbThreatHunterAPI
+        cb = CbThreatHunterAPI(profile=profile)
+        # import pprint
+        # pprint.pprint(cb.alert_search_suggestions)
 
     # Sensor Quering #
     if args.command and (args.command == "sensor-query" or args.command == "sq"):
         LOGGER.info(f"searching {args.environment} environment for sensor query: {args.sensor_query}...")
+        if not isinstance(cb, CbResponseAPI):
+            LOGGER.critical(f"Requires Cb Response API. Got '{product}' API.")
+            return False
 
         sensors = make_sensor_query(cb, args.sensor_query)
         if not sensors:
@@ -202,13 +449,63 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
             print_results = True if print_results.lower() == "y" else False
 
         if len(sensors) > 0 and print_results:
-            print("\n------------------------- SENSOR RESULTS -------------------------")
+            print("\n------------------------- RESPONE SENSOR RESULTS -------------------------")
             for sensor in sensors:
                 if args.all_details:
                     print()
                     print(sensor)
                 else:
-                    print(sensor_info(sensor))
+                    if product == "psc":
+                        print(device_info(sensor))
+                    else:
+                        print(sensor_info(sensor))
+            print()
+        return True
+
+    # Device Quering #
+    if args.command and args.command.startswith("d"):
+        # TODO load swagger_meta_file = "psc/defense/models/deviceInfo.yaml"
+        # and share the properties naes that are of type string/int/uuid (and thus raw searchable)
+        # model_data = {}
+        # with open(os.path.join(mcs.model_base_directory, swagger_meta_file), 'rb') as f:
+        #        model_data = yaml.safe_load(f.read())
+        from cbinterface.psc.device import make_device_query, device_info
+
+        LOGGER.info(f"searching {args.environment} environment for device query: {args.device_query}...")
+        if not isinstance(cb, CbThreatHunterAPI):
+            LOGGER.critical(f"Requires Cb PSC based API. Got '{product}' API.")
+            return False
+
+        if args.device_query.upper() == "FIELDS":
+            device_meta_file = os.path.join(os.path.dirname(cbapi.__file__), "psc/defense/models/deviceInfo.yaml")
+            model_data = {}
+            with open(device_meta_file, "r") as fp:
+                model_data = yaml.safe_load(fp.read())
+            possibly_searchable_props = list(model_data["properties"].keys())
+            print("Device model fields:")
+            for field_name in list(model_data["properties"].keys()):
+                print(f"\t{field_name}")
+            return True
+
+        devices = make_device_query(cb, args.device_query)
+        if not devices:
+            return None
+
+        # don't display large results by default
+        print_results = True
+        if not args.no_warnings and len(devices) > 10:
+            prompt = "Print all results? (y/n) [y] "
+            print_results = input_with_timeout(prompt, default="y")
+            print_results = True if print_results.lower() == "y" else False
+
+        if len(devices) > 0 and print_results:
+            print("\n------------------------- PSC DEVICE RESULTS -------------------------")
+            for device in devices:
+                if args.all_details:
+                    print()
+                    print(device)
+                else:
+                    print(device_info(device))
             print()
         return True
 
@@ -253,13 +550,13 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
 
     # Process Inspection #
     if args.command and (args.command.lower() == "inspect" or args.command.lower().startswith("proc")):
-        process_id = args.process_guid_options
+        process_id = args.guid_with_optional_segment
         process_segment = None
-        if "/" in args.process_guid_options:
-            if not args.process_guid_options.count("/") == 1:
-                LOGGER.error(f"process guid/segement format error: {args.process_guid_options}")
+        if "/" in args.guid_with_optional_segment:
+            if not args.guid_with_optional_segment.count("/") == 1:
+                LOGGER.error(f"process guid/segement format error: {args.guid_with_optional_segment}")
                 return False
-            process_id, process_segment = args.process_guid_options.split("/")
+            process_id, process_segment = args.guid_with_optional_segment.split("/")
             if not re.match("[0-9]{13}", process_segment):
                 LOGGER.error(f"{process_segment} is not in the form of a process segment.")
                 return False
@@ -515,5 +812,3 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
         if args.get_file_content:
             session_id, file_id = args.get_file_content.split(":", 1)
             get_file_content(cb, session_id, file_id)
-
-    return True

@@ -12,9 +12,10 @@ from cbapi.psc.threathunter.models import AsyncProcessQuery
 
 LOGGER = logging.getLogger("cbinterface.psc.query")
 
+
 def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     """Custom query validation.
-    
+
     Args:
         query: Cb threathunter query
     Returns:
@@ -27,10 +28,10 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     url = query._doc_class.validation_url.format(query._cb.credentials.org_key)
 
     args = query._get_query_parameters()
-    if args.get('query', False):
-        args['q'] = args['query']
+    if args.get("query", False):
+        args["q"] = args["query"]
     # v2 search sort key does not work with v1 validation
-    args.pop('sort', None)
+    args.pop("sort", None)
     LOGGER.debug(f"attempting to validate query with args: {args}")
 
     validated = query._cb.get_object(url, query_parameters=args)
@@ -38,6 +39,7 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
         LOGGER.error(f'Invalud query {validated["invalid_message"]}')
         return False
     return True
+
 
 def make_process_query(
     cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
@@ -63,12 +65,13 @@ def make_process_query(
         if start_time or last_time:
             start_time = start_time.isoformat() if start_time else "*"
             end_time = last_time.isoformat() if last_time else "*"
-            processes = processes.where(f'process_start_time:[{start_time} TO {end_time}]')
+            processes = processes.where(f"process_start_time:[{start_time} TO {end_time}]")
         LOGGER.info(f"got {len(processes)} process results.")
     except Exception as e:
         LOGGER.error(f"unexpected exception: {e}")
 
     return processes
+
 
 def print_facet_histogram(processes: AsyncProcessQuery):
     """Print facets"""
@@ -78,7 +81,15 @@ def print_facet_histogram(processes: AsyncProcessQuery):
     # https://developer.carbonblack.com/reference/cb-threathunter/latest/process-search-fields/
     from cbinterface.helpers import create_histogram_string, get_os_independant_filepath
 
-    fields = ["parent_name", "process_name", "process_reputation", "process_username", "process_sha256", "device_name", "device_os", ]
+    fields = [
+        "parent_name",
+        "process_name",
+        "process_reputation",
+        "process_username",
+        "process_sha256",
+        "device_name",
+        "device_os",
+    ]
     path_fields = ["parent_name", "process_name"]
     processes = list(processes)
     facet_dict = {}
@@ -101,19 +112,19 @@ def print_facet_histogram(processes: AsyncProcessQuery):
 
     # special case for "children"
     try:
-        facet_dict['childproc_name'] = {}
+        facet_dict["childproc_name"] = {}
         depth = 0
         for proc in processes:
             if proc.childproc_count < 1:
                 continue
             children = proc.summary.children or []
             for cp in children:
-                process_path = get_os_independant_filepath(cp.get('process_name'))
+                process_path = get_os_independant_filepath(cp.get("process_name"))
                 process_name = process_path.name
-                if process_name not in facet_dict['childproc_name']:
-                    facet_dict['childproc_name'][process_name] = 1
+                if process_name not in facet_dict["childproc_name"]:
+                    facet_dict["childproc_name"][process_name] = 1
                 else:
-                    facet_dict['childproc_name'][process_name] += 1
+                    facet_dict["childproc_name"][process_name] += 1
     except Exception as e:
         LOGGER.warning(f"problem enumerating child process names: {e}")
 

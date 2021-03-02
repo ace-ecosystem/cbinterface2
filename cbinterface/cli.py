@@ -2,7 +2,8 @@
 
 import os
 import re
-#import sys
+
+# import sys
 import time
 import argparse
 import argcomplete
@@ -19,7 +20,14 @@ from cbapi.response import CbResponseAPI
 from cbapi.errors import ConnectionError
 
 from cbinterface.helpers import is_uuid, clean_exit, input_with_timeout
-from cbinterface.config import set_timezone, save_configuration, get_default_cbapi_product, get_default_cbapi_profile, set_default_cbapi_profile, set_default_cbapi_product
+from cbinterface.config import (
+    set_timezone,
+    save_configuration,
+    get_default_cbapi_product,
+    get_default_cbapi_profile,
+    set_default_cbapi_profile,
+    set_default_cbapi_product,
+)
 
 from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
 from cbinterface.psc.cli import add_psc_arguments_to_parser, execute_threathunter_arguments
@@ -50,7 +58,9 @@ def main():
 
     default_environments = [env for env in environments if env.startswith(default_product)]
     default_environment = f"{default_product}:{default_profile}"
-    default_environment = default_environment if default_environments and default_environment in default_environments else environments[0]
+    default_environment = (
+        default_environment if default_environments and default_environment in default_environments else environments[0]
+    )
 
     parser = argparse.ArgumentParser(description="Interface to Carbon Black for IDR teams.")
     parser.add_argument("-d", "--debug", action="store_true", help="Turn on debug logging.")
@@ -62,11 +72,12 @@ def main():
         default=default_environment,
         help=f"specify an environment to work with. Default={default_environment}",
     )
-    parser.add_argument('-sde',
+    parser.add_argument(
+        "-sde",
         "--set-default-environment",
         action="store",
         choices=environments,
-        help='configure your default Cb environment',
+        help="configure your default Cb environment",
     )
     parser.add_argument(
         "-tz",
@@ -83,7 +94,9 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     # query parser
-    parser_query = subparsers.add_parser("query", aliases=["pq", "q"], help="execute a process search query. 'query -h' for more")
+    parser_query = subparsers.add_parser(
+        "query", aliases=["pq", "q"], help="execute a process search query. 'query -h' for more"
+    )
     parser_query.add_argument("query", help="the process search query you'd like to execute")
     parser_query.add_argument(
         "-s",
@@ -92,7 +105,10 @@ def main():
         help="Start time of the process.  Format:'Y-m-d H:M:S' UTC",
     )
     parser_query.add_argument(
-        "-e", "--last-time", action="store", help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' UTC"
+        "-e",
+        "--last-time",
+        action="store",
+        help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' UTC",
     )
     parser_query.add_argument(
         "-nw",
@@ -113,7 +129,9 @@ def main():
     )
 
     # process inspection/investigation parser
-    parser_inspect = subparsers.add_parser("investigate", aliases=["proc", "i"], help="Investigate process events and metadata.")
+    parser_inspect = subparsers.add_parser(
+        "investigate", aliases=["proc", "i"], help="Investigate process events and metadata."
+    )
     parser_inspect.add_argument(
         "process_guid_options", help="the process GUID/segment to inspect. Segment is optional."
     )
@@ -198,7 +216,7 @@ def main():
     """
 
     if args.debug:
-        logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
         coloredlogs.install(level="DEBUG", logger=logging.getLogger())
 
     if args.time_zone:

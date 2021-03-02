@@ -52,6 +52,7 @@ def find_device_by_hostname(cb: CbThreatHunterAPI, name: str) -> Device:
         return None
     return None
 
+
 def time_since_checkin(device: Device, refresh=True) -> datetime.timedelta:
     """Return the time since last device checkin."""
     from dateutil import tz
@@ -61,6 +62,7 @@ def time_since_checkin(device: Device, refresh=True) -> datetime.timedelta:
         device.refresh()
     now = datetime.datetime.utcnow().replace(tzinfo=tz.UTC)
     return now - isoparse(device.last_contact_time)
+
 
 def device_info(device: Device, refresh=False):
     """Print device info."""
@@ -83,7 +85,7 @@ def device_info(device: Device, refresh=False):
     text += f"\tDevice Owner Name: {device.last_name}, {device.first_name}\n"
     text += f"\tDevice Registration Time: {as_configured_timezone(device.registered_time)}\n"
     text += f"\tLast Checkin Time: {as_configured_timezone(device.last_contact_time)}\n"
-    text += "\t "+u'\u21B3' + f" Elapsed Time: {time_since_checkin(device, refresh=False)}\n"
+    text += "\t " + "\u21B3" + f" Elapsed Time: {time_since_checkin(device, refresh=False)}\n"
     text += f"\tLast Reported Event Time: {as_configured_timezone(device.last_reported_time)}\n"
     text += f"\tLast External IP: {device.last_external_ip_address}\n"
     text += f"\tLast Internal IP: {device.last_internal_ip_address}\n"

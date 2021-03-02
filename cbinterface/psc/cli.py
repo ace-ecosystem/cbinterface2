@@ -17,17 +17,29 @@ from cbapi.psc.threathunter.query import Query
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
 from cbinterface.psc.device import make_device_query, device_info
-from cbinterface.psc.process import select_process, print_process_info, print_ancestry, print_process_tree, print_modloads, print_filemods, inspect_process_tree, print_netconns, print_regmods, print_crossprocs, print_childprocs, print_scriptloads, process_to_dict
+from cbinterface.psc.process import (
+    select_process,
+    print_process_info,
+    print_ancestry,
+    print_process_tree,
+    print_modloads,
+    print_filemods,
+    inspect_process_tree,
+    print_netconns,
+    print_regmods,
+    print_crossprocs,
+    print_childprocs,
+    print_scriptloads,
+    process_to_dict,
+)
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
 
+
 def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
-    """Given an argument parser subparser, build a psc specific parser.
-    """
+    """Given an argument parser subparser, build a psc specific parser."""
     # device query (psc)
-    parser_sensor = subparsers.add_parser(
-        "device", aliases=['d'], help="Execute a device query (PSC)."
-    )
+    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query (PSC).")
     parser_sensor.add_argument("device_query", help="the device query you'd like to execute. 'FIELDS' for help.")
     parser_sensor.add_argument(
         "-nw",
@@ -45,9 +57,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
 
-def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace)->bool:
+def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace) -> bool:
     """The logic to execute psc ThreatHunter specific command line arguments.
-    
+
     Args:
         cb: CbThreatHunterAPI
         args: parsed argparse namespace
@@ -59,16 +71,16 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         return False
 
     # Device Quering #
-    if args.command and args.command.startswith('d'):
+    if args.command and args.command.startswith("d"):
         LOGGER.info(f"searching {args.environment} environment for device query: {args.device_query}...")
         if args.device_query.upper() == "FIELDS":
             device_meta_file = os.path.join(os.path.dirname(cbapi_file_path), "psc/defense/models/deviceInfo.yaml")
             model_data = {}
-            with open(device_meta_file, 'r') as fp:
+            with open(device_meta_file, "r") as fp:
                 model_data = yaml.safe_load(fp.read())
-            possibly_searchable_props = list(model_data['properties'].keys())
+            possibly_searchable_props = list(model_data["properties"].keys())
             print("Device model fields:")
-            for field_name in list(model_data['properties'].keys()):
+            for field_name in list(model_data["properties"].keys()):
                 print(f"\t{field_name}")
             return True
 
@@ -132,13 +144,13 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         process_id = args.process_guid_options
         if not is_psc_guid(process_id):
             # check to see if the analyst passed a local file path, which we assume is a local process json file
-            #if os.path.exists(args.process_guid_options):
+            # if os.path.exists(args.process_guid_options):
             # XXX NOTE: create functionality sourced from process json file?
             LOGGER.error(f"{process_id} is not in the form of a CbThreathunter process guid.")
             return False
 
         try:
-            #proc = Process(cb, process_id)
+            # proc = Process(cb, process_id)
             proc = select_process(cb, process_id)
             if not proc:
                 LOGGER.warning(f"Process data does not exist for GUID={process_id}")
