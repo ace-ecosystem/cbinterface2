@@ -23,8 +23,12 @@ pytest-mock = "^3.5.1"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry.scripts]
-cbinterface = "cbinterface.cli:main"
+#[tool.poetry.scripts]
+# https://github.com/python-poetry/poetry/blob/cddd6759f707d5a9d4865d07fddb0ff8107670e3/poetry/masonry/builders/editable.py#L27
+# SCRIPT_TEMPLATE
+# would be pretty sweet if poetry was more flexible so we could point directly to our own script file, OR,
+# update SCRIPT_TEMPLATE to include '# PYTHON_ARGCOMPLETE_OK'
+#cbinterface = "cbinterface.cli:main"
 
 [tool.black]
 line-length = 120
