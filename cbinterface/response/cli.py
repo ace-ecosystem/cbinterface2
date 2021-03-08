@@ -81,69 +81,7 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
         help="Print all available process info (all fields).",
     )
 
-    # live response parser
-    parser_lr = subparsers.add_parser(
-        "live-response", aliases=["lr"], help="perform live response actions on a sensor."
-    )
-    parser_lr.add_argument("hostname_or_sensor_id", help="the hostname or sensor_id to go live with.")
-    parser_lr.add_argument(
-        "-e", "--execute-command", action="store", help="Execute this command on the sensor. NOTE: waits for output."
-    )
-    parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
-    parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")
-    parser_lr.add_argument(
-        "-i",
-        "--sensor-isolation-toggle",
-        action="store_true",
-        help="Sensor hostname/ID to isolation/unisolate (on/off).",
-    )
-
-    # live response subparser
-    lr_subparsers = parser_lr.add_subparsers(dest="live_response_command")
-
-    # live response put file parser
-    parser_put_file = lr_subparsers.add_parser("put", help="put a file on the sensor")
-    parser_put_file.add_argument("local_filepath", action="store", help="Path to the file.")
-    parser_put_file.add_argument("sensor_write_filepath", action="store", help="Path to write the file on the sensor.")
-
-    # live response collect parser
-    parser_collect = lr_subparsers.add_parser("collect", help="collect artifacts from hosts")
-    parser_collect.add_argument(
-        "-i", "--sensor-info", dest="sensor_info", action="store_true", help="print default sensor information"
-    )
-    parser_collect.add_argument("-p", "--process-list", action="store_true", help="show processes running on sensor")
-    parser_collect.add_argument("-f", "--file", action="store", help="collect file at this path on sensor")
-    parser_collect.add_argument(
-        "-lr", "--regkeypath", action="store", help="List all registry values from the specified registry key."
-    )
-    parser_collect.add_argument(
-        "-r", "--regkeyvalue", action="store", help="Returns the associated value of the specified registry key."
-    )
-    parser_collect.add_argument(
-        "-ld", "--list-directory", action="store", help="List the contents of a directory on the sensor."
-    )
-    parser_collect.add_argument(
-        "-wd", "--walk-directory", action="store", help="List the contents of a directory on the sensor."
-    )
-    parser_collect.add_argument("--drives", action="store_true", help="Get logical drives on this sensor.")
-    parser_collect.add_argument(
-        "--memdump", action="store_true", help="Use Cb to dump sensor memory and collect the memdump."
-    )
-
-    # live response remediation parser
-    parser_remediate = lr_subparsers.add_parser("remediate", help="remdiation (delete/kill) actions")
-    parser_remediate.add_argument(
-        "-f", "--delete-file-path", action="store", help="delete the file at this path on the sensor"
-    )
-    parser_remediate.add_argument(
-        "-kpname", "--kill-process-name", action="store", help="kill all processes with this name"
-    )
-    parser_remediate.add_argument("-kpid", "--kill-process-id", action="store", help="kill the process with this ID")
-    parser_remediate.add_argument("-drv", "--delete-regkeyvalue", action="store", help="Delete the regkey value.")
-    parser_remediate.add_argument(
-        "--delete-entire-regkey", action="store", help="Delete the registry key and all values. BE CAREFUL."
-    )
-
+    """
     # session parser
     parser_session = subparsers.add_parser("session", aliases=["s"], help="get session data")
     parser_session.add_argument(
@@ -161,6 +99,7 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
     parser_session.add_argument(
         "-f", "--get-file-content", action="store", help="byte stream any file content to stdout. (use a pipe)"
     )
+    """
 
     # enumeration parser
     parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="get enumeration data")
@@ -486,7 +425,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
             session_manager.process_completed_commands()
 
     # Direct Session Interaction #
-    if args.command and args.command.lower() == "session":
+    if args.command and args.command.startswith("s"):
         if args.list_sensor_sessions:
             print(
                 json.dumps(

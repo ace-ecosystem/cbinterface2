@@ -66,6 +66,9 @@ def as_configured_timezone(timestamp: Union[datetime.datetime, str], apply_time_
     """Convert timestamp to the configured time zone."""
     from cbinterface.config import get_timezone
 
+    if not timestamp:
+        return timestamp
+
     if isinstance(timestamp, str):
         # psc
         try:

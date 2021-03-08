@@ -6,29 +6,52 @@ import time
 import logging
 import threading
 
-from cbapi.response.cblr import LiveResponseSession, LiveResponseSessionManager
-from cbapi.response import CbResponseAPI, Sensor
+from cbapi.psc import Device
+from cbapi.psc.threathunter import CbThreatHunterAPI
+from cbapi.psc.cblr import LiveResponseSession, LiveResponseSessionManager, LiveResponseJobScheduler, WorkItem, JobWorker
 from cbapi.errors import ObjectNotFoundError, TimeoutError
-from cbapi.live_response_api import CbLRManagerBase, LiveResponseJobScheduler, WorkItem, poll_status
+#from cbapi.live_response_api import CbLRManagerBase, WorkItem, poll_status
 
 from typing import List, Union
 
-from cbinterface.response.sensor import is_sensor_online
-from cbinterface.response.commands import BaseSessionCommand
+from cbinterface.psc.device import is_device_online
+from cbinterface.psc.commands import BaseSessionCommand
 
-LOGGER = logging.getLogger("cbinterface.response.session")
+LOGGER = logging.getLogger("cbinterface.psc.session")
 
-CBLR_BASE = "/api/v1/cblr"
+CBLR_BASE = "/integrationServices/v3/cblr"
+
+
+class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
+    def __init__(self, cb, psc_cb, max_workers=10):
+        self.psc_cb = psc_cb
+        super().__init__(cb, max_workers=10)
+
+    def _spawn_new_workers(self):
+        if len(self._job_workers) >= self._max_workers:
+            return
+
+        schedule_max = self._max_workers - len(self._job_workers)
+
+        devices = [s for s in self.psc_cb.select(Device) if s.id in self._unscheduled_jobs
+                   and s.id not in self._job_workers]
+                   #and is_device_online(s)]
+
+        devices_to_schedule = devices[:schedule_max]
+        LOGGER.debug("Spawning new workers to handle these devices: {0}".format(devices_to_schedule))
+        for device in devices_to_schedule:
+            LOGGER.debug("Spawning new JobWorker for device id {0}".format(device.id))
+            self._job_workers[device.id] = JobWorker(self._cb, device.id, self.schedule_queue)
+            self._job_workers[device.id].start()
 
 
 class CustomLiveResponseSessionManager(LiveResponseSessionManager):
     def __init__(self, cb, timeout=30, custom_session_keepalive=False):
-        super().__init__(cb, timeout=timeout, keepalive_sessions=False)
-        # NOTE: keepalives will automatically close any sessions NOT in an active state.
-        # So, don't send keepalives to pending sessions or the session will close.
-        # For this reason, don't start sessions on sensor until those sensors are online.
-        # Still, if a sensor is slow to check in a timing hicup can occur. The result being, a
-        # keepalive will close a pending session that would have otherwise have become active.
+        # First, get a CB object with the LR API permissions
+        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        super().__init__(cblr, timeout=timeout, keepalive_sessions=False)
+        # so now self._cb == cblr -- store a reference to the regular cb
+        self.psc_cb = cb
 
         if custom_session_keepalive:
             self._cleanup_thread = threading.Thread(target=self._keep_active_sessions_alive_thread)
@@ -38,87 +61,73 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         # for storing initiatied commands
         self.commands = []
 
-    def active_session(self, sensor: Sensor):
-        """Return any active sessions on this sensor or None."""
-        active = sensor_live_response_sessions(sensor, active_or_pending=True)
-        if active:
-            session_data = active[0]
-            session_id = session_data["id"]
-            LOGGER.info(f"found existing session id={session_id} in '{session_data['status']}' state")
-            self._sessions[sensor.id] = self.cblr_session_cls(self, session_id, sensor.id, session_data=session_data)
-            return self._sessions[sensor.id]
-        return None
-
-    def get_session(self, sensor: Sensor):
+    def get_session(self, device: Device):
         """Get or create LR session."""
-        active_session = self.active_session(sensor)
-        if isinstance(active_session, self.cblr_session_cls):
-            return active_session
-
-        session_data = self._cb.post_object(f"{CBLR_BASE}/session", {"sensor_id": sensor.id}).json()
+        session_data = self._cb.post_object(f"{CBLR_BASE}/session/{device.id}", {"sensor_id": device.id}).json()
         session_id = session_data["id"]
-        LOGGER.info(f"created session id={session_id}")
-        self._sessions[sensor.id] = self.cblr_session_cls(self, session_id, sensor.id, session_data=session_data)
-        return self._sessions[sensor.id]
+        LOGGER.debug(f"got session id={session_id} with status={session_data['status']}")
+        self._sessions[device.id] = self.cblr_session_cls(self, session_id, device.id, session_data=session_data)
+        return self._sessions[device.id]
 
-    def wait_for_active_session(self, sensor: Sensor, timeout=86400):
+    def wait_for_active_session(self, device: Device, timeout=86400):
         """Return active session or None.
 
         Default timeout is 7 days.
         """
         LOGGER.info(
-            f"attempting to get active session on sensor {sensor.id} (hostname:{sensor.hostname}) for up to {timeout/60} minutes"
+            f"attempting to get active session on device {device.id} (hostname:{device.name}) for up to {timeout/60} minutes"
         )
         start_time = time.time()
         session = None
         status = None
-        while status != "active" and time.time() - start_time < timeout:
-            if not is_sensor_online(sensor):
-                LOGGER.debug(f"waiting for sensor {sensor.id} to come online...")
+        while status != "ACTIVE" and time.time() - start_time < timeout:
+            if not is_device_online(device):
+                LOGGER.debug(f"waiting for device {device.id} to come online...")
                 time.sleep(1)
                 continue
-            if status is None:
-                session = self.get_session(sensor)
-            status = get_session_status(self._cb, session.session_id)
+            session = self.get_session(device)
+            status = session.session_data['status']
             time.sleep(0.5)
 
         if session and is_session_active(session):
-            LOGGER.info(f"got active session {session.session_id} on sensor {sensor.id}.")
+            LOGGER.info(f"got active session {session.session_id}.")
         return session
 
-    def submit_command(self, command: BaseSessionCommand, sensor: Union[int, Sensor]):
+    def submit_command(self, command: BaseSessionCommand, device: Union[int, Device]):
         """
         Create a new job to be executed as a Live Response.
 
         Args:
             command (BaseSessionCommand): The job to be scheduled.
-            sensor (Sensor): Sensor to execute job on.
+            device (Device): Device to execute job on.
         Returns:
             Future: A reference to the running job.
         """
         assert isinstance(command, BaseSessionCommand)
 
-        sensor_id = sensor
-        if isinstance(sensor, Sensor):
-            sensor_id = sensor.id
+        device_id = device
+        if isinstance(device, Device):
+            device_id = device.id
+            command.hostname = device.name
+        LOGGER.info(f"submitting {command} to {device_id}")
 
         if self._job_scheduler is None:
             # spawn the scheduler thread
-            self._job_scheduler = LiveResponseJobScheduler(self._cb)
+            self._job_scheduler = CustomLiveResponseJobScheduler(self._cb, self.psc_cb)
             self._job_scheduler.start()
 
-        if sensor_id not in self._sessions:
-            sensor = Sensor(self._cb, sensor_id, force_init=True)
-            active_session = self.active_session(sensor)
+        if device_id not in self._sessions:
+            device = Device(self._cb, device_id, force_init=True)
+            active_session = self.active_session(device)
             if active_session is None:
-                self.wait_for_active_session(sensor)
+                self.wait_for_active_session(device)
 
-        work_item = WorkItem(command.run, sensor_id)
+        work_item = WorkItem(command.run, device_id)
         self._job_scheduler.submit_job(work_item)
         command.future = work_item.future
-        command.sensor_id = sensor_id
-        command.session_id = self._sessions[sensor_id].session_id
-        command.session_data = self._sessions[sensor_id].session_data
+        command.device_id = device_id
+        command.session_id = self._sessions[device_id].session_id
+        command.session_data = self._sessions[device_id].session_data
         self.commands.append(command)
         return command
 
@@ -168,7 +177,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
             with self._session_lock:
                 for session in self._sessions.values():
                     if session._refcount == 0:
-                        delete_list.append(session.sensor_id)
+                        delete_list.append(session.device_id)
                     else:
                         try:
                             if is_session_active(session):
@@ -176,47 +185,47 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
                                 self._send_keepalive(session.session_id)
                         except ObjectNotFoundError:
                             LOGGER.debug(
-                                f"Session {session.session_id} for sensor {session.sensor_id} not valid any longer, removing from cache"
+                                f"Session {session.session_id} for device {session.device_id} not valid any longer, removing from cache"
                             )
-                            delete_list.append(session.sensor_id)
+                            delete_list.append(session.device_id)
                         except Exception as e:
                             LOGGER.warning(
-                                f"Keepalive on session {session.session_id} (sensor {session.sensor_id}) failed with unknown error: {e}"
+                                f"Keepalive on session {session.session_id} (device {session.device_id}) failed with unknown error: {e}"
                             )
-                            delete_list.append(session.sensor_id)
+                            delete_list.append(session.device_id)
 
-                for sensor_id in delete_list:
-                    self._close_session(self._sessions[sensor_id].session_id)
-                    del self._sessions[sensor_id]
+                for device_id in delete_list:
+                    self._close_session(self._sessions[device_id].session_id)
+                    del self._sessions[device_id]
 
 
-def all_live_response_sessions(cb: CbResponseAPI) -> List:
+def all_live_response_sessions(cb: CbThreatHunterAPI) -> List:
     """List all LR sessions still in server memory."""
     return [sesh for sesh in cb.get_object(f"{CBLR_BASE}/session")]
 
 
-def active_live_response_sessions(cb: CbResponseAPI) -> List:
+def active_live_response_sessions(cb: CbThreatHunterAPI) -> List:
     """Return active LR sessions."""
     return [sesh for sesh in cb.get_object(f"{CBLR_BASE}/session?active_only=true")]
 
 
-def sensor_live_response_sessions(sensor: Sensor, active_or_pending=False):
-    """Get sessions associated to this sensor."""
-    sessions = [session for session in all_live_response_sessions(sensor._cb) if session["sensor_id"] == sensor.id]
+def device_live_response_sessions(device: Device, active_or_pending=False):
+    """Get sessions associated to this device."""
+    sessions = [session for session in all_live_response_sessions(device._cb) if session["device_id"] == device.id]
     if active_or_pending:
         return [session for session in sessions if session["status"] == "active" or session["status"] == "pending"]
     return sessions
 
 
-def sensor_live_response_sessions_by_sensor_id(cb: CbResponseAPI, sensor_id: Union[int, str]):
-    """Get sessions associated to this sensor by sensor id."""
-    if isinstance(sensor_id, str):
-        sensor_id = int(sensor_id)
-    sessions = [session for session in all_live_response_sessions(cb) if session["sensor_id"] == sensor_id]
+def device_live_response_sessions_by_device_id(cb: CbThreatHunterAPI, device_id: Union[int, str]):
+    """Get sessions associated to this device by device id."""
+    if isinstance(device_id, str):
+        device_id = int(device_id)
+    sessions = [session for session in all_live_response_sessions(cb) if session["device_id"] == device_id]
     return sessions
 
 
-def get_session_by_id(cb: CbResponseAPI, session_id):
+def get_session_by_id(cb: CbThreatHunterAPI, session_id):
     """Get a LR session object by id."""
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}")
@@ -225,7 +234,7 @@ def get_session_by_id(cb: CbResponseAPI, session_id):
         return None
 
 
-def get_session_status(cb: CbResponseAPI, session_id):
+def get_session_status(cb: CbThreatHunterAPI, session_id):
     """Return any session status or None."""
     session = get_session_by_id(cb, session_id)
     if session is None:
@@ -235,15 +244,12 @@ def get_session_status(cb: CbResponseAPI, session_id):
 
 def is_session_active(session: LiveResponseSession):
     """Return True if session is active."""
-    session_data = get_session_by_id(session._cb, session.session_id)
-    if session_data is None:
-        return None
-    if session_data["status"] == "active":
+    if session.session_data['status'] == "ACTIVE":
         return True
     return False
 
 
-def get_session_commands(cb: CbResponseAPI, session_id: str):
+def get_session_commands(cb: CbThreatHunterAPI, session_id: str):
     """List commands for this session."""
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command")
@@ -252,7 +258,7 @@ def get_session_commands(cb: CbResponseAPI, session_id: str):
         return None
 
 
-def get_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
+def get_command_result(cb: CbThreatHunterAPI, session_id: str, command_id: str):
     """Get results of a LR session command."""
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command/{command_id}")
@@ -261,15 +267,17 @@ def get_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
         return None
 
 
-def get_file_content(cb: CbResponseAPI, session_id: str, file_id: str):
+def get_file_content(cb: CbThreatHunterAPI, session_id: str, file_id: str):
     """Get file content stored in LR session and write the file locally."""
     from cbinterface.helpers import get_os_independant_filepath
 
     try:
+        real_session_id, device_id = session_id.split(":", 1)
+        filename = f"{real_session_id}_on_{device_id}"
         file_metadata = cb.get_object(f"{CBLR_BASE}/session/{session_id}/file/{file_id}")
         if file_metadata:
             filepath = get_os_independant_filepath(file_metadata["file_name"])
-            filename = f"{session_id}_{filepath.name}"
+            filename = f"{filename}_{filepath.name}"
         result = cb.session.get(f"{CBLR_BASE}/session/{session_id}/file/{file_id}/content", stream=True)
         if result.status_code != 200:
             LOGGER.error(
