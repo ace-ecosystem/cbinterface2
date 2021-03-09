@@ -7,8 +7,8 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "2.1.0"
-description = "Command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions."
+# assumes we're at the repo root
+from cbinterface import __version__
 
 here = path.abspath(path.dirname(__file__))
 
@@ -23,7 +23,7 @@ with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
 setup(
     name='cbinterface',
     version=__version__,
-    description=description,
+    description="Command line tool for interfacing with carbonblack environments (PSC & Response) for analysis/investigations and live response playbooks.",
     long_description=long_description,
     long_description_content_type='text/markdown',
     url="https://github.com/seanmcfeely/cbinterface2",

@@ -18,15 +18,16 @@ from cbinterface.commands import (
 )
 
 # GLOBALS #
-LOGGER = logging.getLogger("cbinterface."+__name__)
+LOGGER = logging.getLogger("cbinterface." + __name__)
 
-IGNORED_SECTIONS = ['overview']
+IGNORED_SECTIONS = ["overview"]
 
-REQUIRED_CMD_KEYS = ['operation']
-REQUIRED_OP_KEY_MAP = {'RUN': ['command'],
-                       'UPLOAD': ['path'],
-                       'DOWNLOAD': ['file_path'],
-                       }
+REQUIRED_CMD_KEYS = ["operation"]
+REQUIRED_OP_KEY_MAP = {
+    "RUN": ["command"],
+    "UPLOAD": ["path"],
+    "DOWNLOAD": ["file_path"],
+}
 """ # remove?
 OPTIONAL_CMD_KEYS = ['wait_for_completion', 'get_results']
 OPTIONAL_OP_KEY_MAP = {'RUN': ['async_run', 'write_results_path', 'print_results',
@@ -39,6 +40,7 @@ OPTIONAL_OP_KEY_MAP = {'RUN': ['async_run', 'write_results_path', 'print_results
 # Get the working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
 def playbook_missing_required_keys(config, KEYS):
     for key in KEYS:
         for section in config.sections():
@@ -49,12 +51,18 @@ def playbook_missing_required_keys(config, KEYS):
                 return True
     return False
 
+
 def operation_missing_required_keys(config, section, KEYS):
     for key in KEYS:
         if not config.has_option(section, key):
-            LOGGER.error("{} is missing required operation key:{} for operation:{}".format(section, key, config[section]['operation']))
+            LOGGER.error(
+                "{} is missing required operation key:{} for operation:{}".format(
+                    section, key, config[section]["operation"]
+                )
+            )
             return True
     return False
+
 
 def load_playbook(playbook_path):
     """Load playbook config from path."""
@@ -62,7 +70,7 @@ def load_playbook(playbook_path):
     if not os.path.exists(playbook_path):
         playbook_path = os.path.join(BASE_DIR, playbook_path)
     if not os.path.exists(playbook_path):
-        playbook_name = playbook_path[playbook_path.rfind('/')+1:playbook_path.rfind('.')]
+        playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
         LOGGER.error(f"Path to '{playbook_name}' playbook does not exist: {playbook_path}")
         return False
     LOGGER.debug(f"loading playbook path: {playbook_path}")
@@ -75,7 +83,8 @@ def load_playbook(playbook_path):
         return False
     return playbook
 
-def enforce_argument_placeholders(playbook: ConfigParser, placeholders: dict={}):
+
+def enforce_argument_placeholders(playbook: ConfigParser, placeholders: dict = {}):
     """Some playbooks require arguments to execute. These arguments are in the form of string format placeholder keys.
     Make sure we have all of the arguments for this playbook. Prompt the user for those arguments if we don't.
 
@@ -87,13 +96,18 @@ def enforce_argument_placeholders(playbook: ConfigParser, placeholders: dict={})
     """
     LOGGER.debug("Enforcing argument placeholders")
     args_needed = []
-    required_args = playbook['overview']['required_arguments'].split(',') if playbook.has_option('overview', 'required_arguments') else None
+    required_args = (
+        playbook["overview"]["required_arguments"].split(",")
+        if playbook.has_option("overview", "required_arguments")
+        else None
+    )
     if required_args:
         args_needed = [arg for arg in required_args if arg not in placeholders.keys()]
     for arg in args_needed:
         prompt = f"playbook needs argument {arg}: "
         placeholders[arg] = input_with_timeout(prompt)
     return placeholders
+
 
 def build_playbook_commands(playbook_path, placeholders={}):
     """Build the live response commands that define this playbook.
@@ -109,12 +123,12 @@ def build_playbook_commands(playbook_path, placeholders={}):
     playbook = load_playbook(playbook_path)
     placeholders = enforce_argument_placeholders(playbook, placeholders)
 
-    playbook_name = playbook_path[playbook_path.rfind('/')+1:playbook_path.rfind('.')]
+    playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
     playbook_commands = [cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS]
 
     # make sure requirements are met first
     for command in playbook_commands:
-        op =  playbook[command]['operation'].upper()
+        op = playbook[command]["operation"].upper()
         if op not in REQUIRED_OP_KEY_MAP:
             LOGGER.error("{op} is not a recognized operation")
             return False
@@ -124,28 +138,35 @@ def build_playbook_commands(playbook_path, placeholders={}):
     LOGGER.info(f"building live response commands defined by {playbook_name}")
 
     for command in playbook_commands:
-        op =  playbook[command]['operation'].upper()
+        op = playbook[command]["operation"].upper()
 
-        if op == 'RUN':
-            command_string = playbook[command]['command']
-            wait_for_output = playbook[command].getboolean('wait_for_output', True)
-            remote_output_file_name  = playbook[command].get('remote_output_file_name', None)
-            working_directory = playbook[command].getboolean('working_directory', None)
-            wait_timeout = playbook[command].getint('wait_timeout', 30)
-            wait_for_completion = playbook[command].getboolean('wait_for_completion', True)
-            print_results = playbook[command].getboolean('print_results', True)
-            write_results_path = playbook[command].get('write_results_path', False)
+        if op == "RUN":
+            command_string = playbook[command]["command"]
+            wait_for_output = playbook[command].getboolean("wait_for_output", True)
+            remote_output_file_name = playbook[command].get("remote_output_file_name", None)
+            working_directory = playbook[command].getboolean("working_directory", None)
+            wait_timeout = playbook[command].getint("wait_timeout", 30)
+            wait_for_completion = playbook[command].getboolean("wait_for_completion", True)
+            print_results = playbook[command].getboolean("print_results", True)
+            write_results_path = playbook[command].get("write_results_path", False)
 
-            cmd = ExecuteCommand(command_string, wait_for_output=wait_for_output, remote_output_file_name=remote_output_file_name,
-                                 working_directory=working_directory, wait_timeout=wait_timeout, wait_for_completion=wait_for_completion,
-                                 print_results=print_results, write_results_path=write_results_path)
+            cmd = ExecuteCommand(
+                command_string,
+                wait_for_output=wait_for_output,
+                remote_output_file_name=remote_output_file_name,
+                working_directory=working_directory,
+                wait_timeout=wait_timeout,
+                wait_for_completion=wait_for_completion,
+                print_results=print_results,
+                write_results_path=write_results_path,
+            )
             cmd.placeholders = placeholders
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
 
-        elif op == 'DOWNLOAD' or op == 'PUT':
-            file_path = playbook[command]['file_path'].format(**placeholders)
-            client_file_path = playbook[command]['client_file_path'].format(**placeholders)
+        elif op == "DOWNLOAD" or op == "PUT":
+            file_path = playbook[command]["file_path"].format(**placeholders)
+            client_file_path = playbook[command]["client_file_path"].format(**placeholders)
 
             if not os.path.exists(file_path):
                 original_fp = file_path
@@ -161,9 +182,9 @@ def build_playbook_commands(playbook_path, placeholders={}):
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
 
-        elif op == 'UPLOAD' or op == 'GET':
-            path = playbook[command]['path'].format(**placeholders)
-            write_results_path = playbook[command].get('write_results_path', None)
+        elif op == "UPLOAD" or op == "GET":
+            path = playbook[command]["path"].format(**placeholders)
+            write_results_path = playbook[command].get("write_results_path", None)
             cmd = GetFile(path, output_filename=write_results_path)
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)

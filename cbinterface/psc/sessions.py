@@ -8,9 +8,16 @@ import threading
 
 from cbapi.psc import Device
 from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.psc.cblr import LiveResponseSession, LiveResponseSessionManager, LiveResponseJobScheduler, WorkItem, JobWorker
+from cbapi.psc.cblr import (
+    LiveResponseSession,
+    LiveResponseSessionManager,
+    LiveResponseJobScheduler,
+    WorkItem,
+    JobWorker,
+)
 from cbapi.errors import ObjectNotFoundError, TimeoutError
-#from cbapi.live_response_api import CbLRManagerBase, WorkItem, poll_status
+
+# from cbapi.live_response_api import CbLRManagerBase, WorkItem, poll_status
 
 from typing import List, Union
 
@@ -33,9 +40,10 @@ class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
 
         schedule_max = self._max_workers - len(self._job_workers)
 
-        devices = [s for s in self.psc_cb.select(Device) if s.id in self._unscheduled_jobs
-                   and s.id not in self._job_workers]
-                   #and is_device_online(s)]
+        devices = [
+            s for s in self.psc_cb.select(Device) if s.id in self._unscheduled_jobs and s.id not in self._job_workers
+        ]
+        # and is_device_online(s)]
 
         devices_to_schedule = devices[:schedule_max]
         LOGGER.debug("Spawning new workers to handle these devices: {0}".format(devices_to_schedule))
@@ -86,7 +94,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
                 time.sleep(1)
                 continue
             session = self.get_session(device)
-            status = session.session_data['status']
+            status = session.session_data["status"]
             time.sleep(0.5)
 
         if session and is_session_active(session):
@@ -233,9 +241,11 @@ def get_session_by_id(cb: CbThreatHunterAPI, session_id):
         LOGGER.warning(f"no live resonse session by ID={session_id}")
         return None
 
+
 def close_session_by_id(cb: CbThreatHunterAPI, session_id):
     """Close a session by ID."""
     return cb.put_object(f"{CBLR_BASE}/session", {"session_id": session_id, "status": "CLOSE"}).json()
+
 
 def get_session_status(cb: CbThreatHunterAPI, session_id):
     """Return any session status or None."""
@@ -247,7 +257,7 @@ def get_session_status(cb: CbThreatHunterAPI, session_id):
 
 def is_session_active(session: LiveResponseSession):
     """Return True if session is active."""
-    if session.session_data['status'] == "ACTIVE":
+    if session.session_data["status"] == "ACTIVE":
         return True
     return False
 

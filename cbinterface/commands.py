@@ -34,9 +34,9 @@ class BaseSessionCommand:
     def fill_placeholders(self, string_item: str, placeholders={}):
         # fill common placeholders
         placeholders = placeholders if placeholders else self.placeholders
-        placeholders['HOSTNAME'] = placeholders.get('HOSTNAME', self.hostname)
-        placeholders['SENSOR_ID'] = placeholders.get('SENSOR_ID', self.sensor_id)
-        placeholders['DEVICE_ID'] = placeholders.get('DEVICE_ID', self.sensor_id)
+        placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
+        placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
+        placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
         return string_item.format(**placeholders)
 
     @property
@@ -47,7 +47,7 @@ class BaseSessionCommand:
 
     @property
     def sensor_id(self):
-        return self.session_data.get('sensor_id')
+        return self.session_data.get("sensor_id")
 
     @property
     def initiatied(self):
@@ -180,7 +180,7 @@ class SetRegKeyValue(BaseSessionCommand):
 
 class ExecuteCommand(BaseSessionCommand):
     """Create a new process on the remote machine with the specified command string.
-    
+
     Args:
         command (str): Command string used for the create process operation.
         wait_for_output (bool): True to block on output from the new process (execute in foreground).
@@ -195,9 +195,18 @@ class ExecuteCommand(BaseSessionCommand):
     Returns:
         str: The output of the process.
     """
-    def __init__(self, command: str, wait_for_output=True, remote_output_file_name=None,
-                 working_directory=None, wait_timeout=60, wait_for_completion=True, print_results=True,
-                 write_results_path=False):
+
+    def __init__(
+        self,
+        command: str,
+        wait_for_output=True,
+        remote_output_file_name=None,
+        working_directory=None,
+        wait_timeout=60,
+        wait_for_completion=True,
+        print_results=True,
+        write_results_path=False,
+    ):
         super().__init__(description=f"Execute {command}")
         self._command_string = command
         self.wait_for_output = wait_for_output
@@ -214,8 +223,12 @@ class ExecuteCommand(BaseSessionCommand):
         self._command_string = self.fill_placeholders(self._command_string)
         self.start_time = time.time()
         session.create_process(
-            self._command_string,  wait_for_output=self.wait_for_output, remote_output_file_name=self.remote_output_file_name,
-            working_directory=self.working_directory, wait_timeout=self.wait_timeout, wait_for_completion=self.wait_for_completion
+            self._command_string,
+            wait_for_output=self.wait_for_output,
+            remote_output_file_name=self.remote_output_file_name,
+            working_directory=self.working_directory,
+            wait_timeout=self.wait_timeout,
+            wait_for_completion=self.wait_for_completion,
         )
         self.elapsed_time = timedelta(seconds=(time.time() - self.start_time))
 
@@ -236,15 +249,17 @@ class ExecuteCommand(BaseSessionCommand):
             self.write_results_path = self.fill_placeholders(self.write_results_path)
             if os.path.exists(self.write_results_path):
                 LOGGER.info(f"overriting existing file: {self.write_results_path}")
-            with open(self.write_results_path, 'wb') as fp:
+            with open(self.write_results_path, "wb") as fp:
                 fp.write(self.result)
         return True
+
 
 #######################
 # Collection Commands #
 #######################
 class ProcessListing(BaseSessionCommand):
     """Get process listing via Live Response."""
+
     def __init__(self):
         super().__init__(description="process listing")
 
@@ -328,6 +343,7 @@ class ListRegKeyValues(BaseSessionCommand):
 
 class RegKeyValue(BaseSessionCommand):
     """Get the associated value of the specified registry key."""
+
     # TODO: add write_results option and make print_results an option
 
     def __init__(self, regkeyvalue: str):
@@ -550,6 +566,8 @@ class KillProcessByName(BaseSessionCommand):
 
 
 """ Not used: left as an example of recursive command."""
+
+
 class RecursiveKillProcessByName(BaseSessionCommand):
     """Recursivly terminate a process by process name.
 

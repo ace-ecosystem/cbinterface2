@@ -392,7 +392,9 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 LOGGER.info(f"recorded command: {cmd}")
 
         # Playbook execution #
-        if args.live_response_command and ( args.live_response_command.startswith("play") or args.live_response_command == "pb"):
+        if args.live_response_command and (
+            args.live_response_command.startswith("play") or args.live_response_command == "pb"
+        ):
             playbook_commands = build_playbook_commands(args.playbook_configpath)
             commands.extend(playbook_commands)
             LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")

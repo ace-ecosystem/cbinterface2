@@ -49,7 +49,7 @@ def main():
 
     # set custom attributes
     default_profile = cbapi.auth.default_profile
-    default_profile['lr_token'] = None # needed for psc
+    default_profile["lr_token"] = None  # needed for psc
 
     # locate configured environments
     supported_products = ["response", "psc"]
@@ -255,7 +255,9 @@ def main():
     parser_put_file.add_argument("sensor_write_filepath", action="store", help="Path to write the file on the sensor.")
 
     # live response put file parser
-    parser_playbook = lr_subparsers.add_parser("playbook", aliases=["pb", "play"], help="execute a live response playbook script")
+    parser_playbook = lr_subparsers.add_parser(
+        "playbook", aliases=["pb", "play"], help="execute a live response playbook script"
+    )
     parser_playbook.add_argument("playbook_configpath", action="store", help="Path to the plybook config file.")
 
     # live response collect parser

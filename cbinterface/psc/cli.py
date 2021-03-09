@@ -20,7 +20,13 @@ from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
-from cbinterface.psc.device import make_device_query, device_info, time_since_checkin, find_device_by_hostname, is_device_online
+from cbinterface.psc.device import (
+    make_device_query,
+    device_info,
+    time_since_checkin,
+    find_device_by_hostname,
+    is_device_online,
+)
 from cbinterface.psc.process import (
     select_process,
     print_process_info,
@@ -63,24 +69,28 @@ from cbinterface.psc.sessions import (
     get_session_commands,
     get_command_result,
     get_file_content,
-    close_session_by_id
+    close_session_by_id,
 )
 from cbinterface.playbooks import build_playbook_commands
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
 
 
-def toggle_device_quarantine(cb: CbThreatHunterAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool) -> bool:
+def toggle_device_quarantine(
+    cb: CbThreatHunterAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool
+) -> bool:
     """Toggle device quarantine state.
-    
+
     Args:
         devices: DeviceSearchQuery
         quarantine: set quarantine if True, else set quarantine to off state.
     """
     if len(devices) > 0:
         if len(devices) > 10 and quarantine:
-            LOGGER.error(f"For now, not going to quarnantine {len(devices)} devices as a safe gaurd "
-                            f"to prevent mass device impact... use the GUI if you must.")
+            LOGGER.error(
+                f"For now, not going to quarnantine {len(devices)} devices as a safe gaurd "
+                f"to prevent mass device impact... use the GUI if you must."
+            )
             return False
         verbiage = "quarantine" if quarantine else "NOT quarantine"
         emotion = "👀" if quarantine else "👏"
@@ -207,8 +217,9 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.facets:
             LOGGER.info("getting facet data...")
-            #print_facet_histogram(processes)
+            # print_facet_histogram(processes)
             from cbinterface.psc.query import print_facet_histogram_v2
+
             print_facet_histogram_v2(cb, args.query)
 
         return
@@ -310,7 +321,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         LOGGER.info(f"searching for device...")
         device = None
-        try: # if device.id
+        try:  # if device.id
             device = Device(cb, args.hostname_or_sensor_id)
         except ClientError:
             device = find_device_by_hostname(cb, args.hostname_or_sensor_id)
@@ -417,11 +428,13 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 LOGGER.info(f"recorded command: {cmd}")
 
         # Playbook execution #
-        if args.live_response_command and ( args.live_response_command.startswith("play") or args.live_response_command == "pb"):
+        if args.live_response_command and (
+            args.live_response_command.startswith("play") or args.live_response_command == "pb"
+        ):
             playbook_commands = build_playbook_commands(args.playbook_configpath)
             commands.extend(playbook_commands)
             LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
-            
+
         # Handle LR commands #
         if commands:
             timeout = 1200  # default 20 minutes (same used by Cb)
@@ -460,10 +473,10 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     if args.command and args.command.startswith("s"):
         cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
-        #if args.list_all_sessions:
-            # Not implemented with PSC
-        #if args.list_sensor_sessions:
-            # Not implemented with PSC
+        # if args.list_all_sessions:
+        # Not implemented with PSC
+        # if args.list_sensor_sessions:
+        # Not implemented with PSC
 
         if args.get_session_command_list:
             print(json.dumps(get_session_commands(cblr, args.get_session_command_list), indent=2, sort_keys=True))

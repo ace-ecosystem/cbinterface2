@@ -136,15 +136,17 @@ def print_facet_histogram(processes: AsyncProcessQuery):
     return
 
 
-def print_facet_histogram_v2(cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, end_time: datetime.datetime = None):
+def print_facet_histogram_v2(
+    cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Get query facet results from the CbAPI enriched events facets."""
- 
-    #NOTE: no support for childproc facets with this built-in
+
+    # NOTE: no support for childproc facets with this built-in
 
     from cbinterface.helpers import get_os_independant_filepath
 
     post_data = {}
-    post_data['query'] = query
+    post_data["query"] = query
     fields = [
         "parent_name",
         "process_name",
@@ -155,17 +157,17 @@ def print_facet_histogram_v2(cb: CbThreatHunterAPI, query: str, start_time: date
         "device_os",
     ]
     path_fields = ["parent_name", "process_name"]
-    post_data['terms'] = {'fields': fields}
-    post_data['time_range'] = {}
+    post_data["terms"] = {"fields": fields}
+    post_data["time_range"] = {}
     if start_time:
-        post_data['time_range']['start'] = start_time.isoformat()
+        post_data["time_range"]["start"] = start_time.isoformat()
     if end_time:
-        post_data['time_range']['end'] = end_time.isoformat()
-    
+        post_data["time_range"]["end"] = end_time.isoformat()
+
     # TODO handle status_code!=200 and response is not json for both requests
 
     uri = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/facet_jobs"
-    job_id = cb.post_object(uri, post_data).json().get('job_id', None)
+    job_id = cb.post_object(uri, post_data).json().get("job_id", None)
     if not job_id:
         LOGGER.error(f"failed to get facet job.")
         return False
@@ -174,23 +176,23 @@ def print_facet_histogram_v2(cb: CbThreatHunterAPI, query: str, start_time: date
     facet_data = cb.get_object(uri)
 
     print("\n------------------------- FACET HISTOGRAMS -------------------------")
-    total = facet_data['num_found']
-    for facets in facet_data['terms']:
-        field_name=facets['field']
+    total = facet_data["num_found"]
+    for facets in facet_data["terms"]:
+        field_name = facets["field"]
         print(f"\n\t{field_name} results: {len(facets['values'])}")
         print("\t--------------------------------")
-        for entry in facets['values']:
+        for entry in facets["values"]:
             entry_name = entry["name"]
-            if field_name in path_fields and len(entry_name)>55:
+            if field_name in path_fields and len(entry_name) > 55:
                 file_path = get_os_independant_filepath(entry_name)
                 file_name = file_path.name
-                file_path = entry_name[:len(entry_name)-len(file_name)]
-                file_path = file_path[:40-len(file_name)]
+                file_path = entry_name[: len(entry_name) - len(file_name)]
+                file_path = file_path[: 40 - len(file_name)]
                 entry_name = f"{file_path}...{file_name}"
-            bar_value = int( ( (entry["total"]/total) *100 ) /2)
+            bar_value = int(((entry["total"] / total) * 100) / 2)
             print(
                 "%30s: %5s %5s%% %s"
-                % (entry_name, entry["total"], int(entry["total"]/total*100), "\u25A0" * bar_value)
+                % (entry_name, entry["total"], int(entry["total"] / total * 100), "\u25A0" * bar_value)
             )
 
     print()

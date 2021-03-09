@@ -54,7 +54,7 @@ def time_since_checkin(device: Device, refresh=True) -> datetime.timedelta:
     from dateutil import tz
     from dateutil.parser import isoparse
 
-    if not device.get('last_contact_time'):
+    if not device.get("last_contact_time"):
         return None
 
     if refresh:
