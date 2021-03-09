@@ -33,7 +33,7 @@ from cbinterface.response.sessions import (
     get_command_result,
     get_file_content,
 )
-from cbinterface.response.commands import (
+from cbinterface.commands import (
     PutFile,
     ProcessListing,
     GetFile,
@@ -53,6 +53,7 @@ from cbinterface.response.commands import (
     GetSystemMemoryDump,
 )
 from cbinterface.response.enumerations import logon_history
+from cbinterface.playbooks import build_playbook_commands
 
 LOGGER = logging.getLogger("cbinterface.response.cli")
 
@@ -389,6 +390,12 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 cmd = DeleteRegistryKey(args.delete_entire_regkey)
                 commands.append(cmd)
                 LOGGER.info(f"recorded command: {cmd}")
+
+        # Playbook execution #
+        if args.live_response_command and ( args.live_response_command.startswith("play") or args.live_response_command == "pb"):
+            playbook_commands = build_playbook_commands(args.playbook_configpath)
+            commands.extend(playbook_commands)
+            LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
 
         # Handle LR commands #
         if commands:

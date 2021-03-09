@@ -57,6 +57,7 @@ def main():
     configured_products = {}
     for product in supported_products:
         configured_products[product] = False
+        # FileCredentialStore loads `default_profile`
         for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
             configured_products[product] = True
             environments.append(f"{product}:{profile}")
@@ -252,6 +253,10 @@ def main():
     parser_put_file = lr_subparsers.add_parser("put", help="put a file on the sensor")
     parser_put_file.add_argument("local_filepath", action="store", help="Path to the file.")
     parser_put_file.add_argument("sensor_write_filepath", action="store", help="Path to write the file on the sensor.")
+
+    # live response put file parser
+    parser_playbook = lr_subparsers.add_parser("playbook", aliases=["pb", "play"], help="execute a live response playbook script")
+    parser_playbook.add_argument("playbook_configpath", action="store", help="Path to the plybook config file.")
 
     # live response collect parser
     parser_collect = lr_subparsers.add_parser("collect", help="collect artifacts from hosts")

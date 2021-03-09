@@ -14,8 +14,8 @@ from cbapi.errors import ObjectNotFoundError, TimeoutError
 
 from typing import List, Union
 
+from cbinterface.commands import BaseSessionCommand
 from cbinterface.psc.device import is_device_online
-from cbinterface.psc.commands import BaseSessionCommand
 
 LOGGER = logging.getLogger("cbinterface.psc.session")
 
@@ -108,7 +108,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         device_id = device
         if isinstance(device, Device):
             device_id = device.id
-            command.hostname = device.name
+            command._hostname = device.name
         LOGGER.info(f"submitting {command} to {device_id}")
 
         if self._job_scheduler is None:
@@ -233,6 +233,9 @@ def get_session_by_id(cb: CbThreatHunterAPI, session_id):
         LOGGER.warning(f"no live resonse session by ID={session_id}")
         return None
 
+def close_session_by_id(cb: CbThreatHunterAPI, session_id):
+    """Close a session by ID."""
+    return cb.put_object(f"{CBLR_BASE}/session", {"session_id": session_id, "status": "CLOSE"}).json()
 
 def get_session_status(cb: CbThreatHunterAPI, session_id):
     """Return any session status or None."""

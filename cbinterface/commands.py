@@ -2,12 +2,13 @@
 
 import os
 import json
+import time
 import logging
-
+from datetime import timedelta
 from typing import Union
 from concurrent.futures import Future
 
-from cbapi.response.cblr import LiveResponseSession
+from cbapi.live_response_api import CbLRSessionBase
 
 LOGGER = logging.getLogger("cbinterface.command")
 
@@ -24,13 +25,29 @@ class BaseSessionCommand:
         self.session_id = None
         # store a copy of session data
         self.session_data = {}
-        self.sensor_id = None
+        self._sensor_id = None
         self._exception = None
         self._result = None
+        self._hostname = None
+        self.placeholders = {}
+
+    def fill_placeholders(self, string_item: str, placeholders={}):
+        # fill common placeholders
+        placeholders = placeholders if placeholders else self.placeholders
+        placeholders['HOSTNAME'] = placeholders.get('HOSTNAME', self.hostname)
+        placeholders['SENSOR_ID'] = placeholders.get('SENSOR_ID', self.sensor_id)
+        placeholders['DEVICE_ID'] = placeholders.get('DEVICE_ID', self.sensor_id)
+        return string_item.format(**placeholders)
 
     @property
     def hostname(self):
-        return self.session_data.get("hostname", "")
+        # NOTE: Appears this is set to None for psc. So, custom
+        # session manager sets it right before job submission.
+        return self.session_data.get("hostname") or self._hostname
+
+    @property
+    def sensor_id(self):
+        return self.session_data.get('sensor_id')
 
     @property
     def initiatied(self):
@@ -85,7 +102,9 @@ class BaseSessionCommand:
     def __str__(self):
         txt = f"LrSessionCommand: {self.description}"
         if self.hostname:
-            txt += f" - sensor:{self.hostname} - session:{self.session_id}"
+            txt += f" - device:{self.hostname}"
+        if self.session_id:
+            txt += f" - session:{self.session_id}"
         txt += f" - status:{self.status}"
         return txt
 
@@ -97,11 +116,11 @@ class PutFile(BaseSessionCommand):
     """Get process listing via Live Response."""
 
     def __init__(self, local_filepath, sensor_write_filepath):
-        super().__init__(description="Put file on sensor")
+        super().__init__(description="Put file on device")
         self.local_filepath = local_filepath
         self.sensor_write_filepath = sensor_write_filepath
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         try:
             with open(self.local_filepath, "rb") as fp:
                 data = fp.read()
@@ -111,7 +130,7 @@ class PutFile(BaseSessionCommand):
 
     def process_result(self):
         # it worked if execution makes it here
-        LOGGER.info(f"put '{self._file_path}' on {self.hostname} via session {self.session_id}")
+        LOGGER.info(f"put '{self.sensor_write_filepath}' on {self.hostname} via session {self.session_id}")
         return True
 
 
@@ -121,7 +140,7 @@ class LogicalDrives(BaseSessionCommand):
     def __init__(self):
         super().__init__(description="List logical drives")
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.session_data.get("drives", [])
 
     def process_result(self):
@@ -137,7 +156,7 @@ class CreateRegKey(BaseSessionCommand):
         super().__init__(description=f"Create A Registry Key @ '{regkey}'")
         self.regkey = regkey
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.create_registry_key(self.regkey)
 
     def process_result(self):
@@ -152,7 +171,7 @@ class SetRegKeyValue(BaseSessionCommand):
         self.regkey = regkey
         self.value = value
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.set_registry_value(self.regkey, self.value)
 
     def process_result(self):
@@ -160,39 +179,76 @@ class SetRegKeyValue(BaseSessionCommand):
 
 
 class ExecuteCommand(BaseSessionCommand):
-    """Create a new process on the remote machine with the specified command string."""
+    """Create a new process on the remote machine with the specified command string.
+    
+    Args:
+        command (str): Command string used for the create process operation.
+        wait_for_output (bool): True to block on output from the new process (execute in foreground).
+            This will also set wait_for_completion (below).
+        remote_output_file_name (str): The remote output file name used for process output.
+        working_directory (str): The working directory of the create process operation.
+        wait_timeout (int): Timeout used for this command.
+        wait_for_completion (bool): True to wait until the process is completed before returning.
+        print_results (bool): Print results to console if True.
+        write_results_path: Path to write the results. Default is to write nothing.
 
-    def __init__(self, command: str, wait_timeout=60, wait_for_output=True):
+    Returns:
+        str: The output of the process.
+    """
+    def __init__(self, command: str, wait_for_output=True, remote_output_file_name=None,
+                 working_directory=None, wait_timeout=60, wait_for_completion=True, print_results=True,
+                 write_results_path=False):
         super().__init__(description=f"Execute {command}")
         self._command_string = command
-        self.wait_timeout = wait_timeout
         self.wait_for_output = wait_for_output
+        self.remote_output_file_name = remote_output_file_name
+        self.working_directory = working_directory
+        self.wait_timeout = wait_timeout
+        self.wait_for_completion = wait_for_completion
+        self.print_results = print_results
+        self.write_results_path = write_results_path
+        self.start_time = None
+        self.elapsed_time = None
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
+        self._command_string = self.fill_placeholders(self._command_string)
+        self.start_time = time.time()
         session.create_process(
-            self._command_string, wait_timeout=self.wait_timeout, wait_for_output=self.wait_for_output
+            self._command_string,  wait_for_output=self.wait_for_output, remote_output_file_name=self.remote_output_file_name,
+            working_directory=self.working_directory, wait_timeout=self.wait_timeout, wait_for_completion=self.wait_for_completion
         )
+        self.elapsed_time = timedelta(seconds=(time.time() - self.start_time))
 
     def process_result(self):
+        LOGGER.debug(f"{self} took {self.elapsed_time} to return.")
         if not self.result:
-            logging.info("no results.")
-            return
-        print("\n-------------------------")
-        print(self.result.decode("utf-8"))
-        print("\n-------------------------")
-        print()
-
+            if self.wait_for_output:
+                LOGGER.warning("Expected output, but did not receive results.")
+                return False
+            LOGGER.info(f"successfully executed '{self._command_string}'. no results returned.")
+            return True
+        if self.print_results:
+            print("\n-------------------------")
+            print(self.result.decode("utf-8"))
+            print("\n-------------------------")
+            print()
+        if self.write_results_path:
+            self.write_results_path = self.fill_placeholders(self.write_results_path)
+            if os.path.exists(self.write_results_path):
+                LOGGER.info(f"overriting existing file: {self.write_results_path}")
+            with open(self.write_results_path, 'wb') as fp:
+                fp.write(self.result)
+        return True
 
 #######################
 # Collection Commands #
 #######################
 class ProcessListing(BaseSessionCommand):
     """Get process listing via Live Response."""
-
     def __init__(self):
         super().__init__(description="process listing")
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.list_processes()
 
     def process_result(self):
@@ -207,13 +263,13 @@ class ListDirectory(BaseSessionCommand):
         super().__init__(description=f"List Directory @ {dir_path}")
         self.dir_path = dir_path
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.list_directory(self.dir_path)
 
     def process_result(self):
         results = self.result
         if not results:
-            logging.info("no results.")
+            LOGGER.info("no results.")
             return
         print(json.dumps(results, indent=2, sort_keys=True))
 
@@ -226,12 +282,12 @@ class WalkDirectory(BaseSessionCommand):
         self.dir_path = dir_path
         self.followlinks = followlinks
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.walk(self.dir_path, followlinks=self.followlinks)
 
     def process_result(self):
         if not self.result:
-            logging.warning("no results.")
+            LOGGER.warning("no results.")
             return
         print(f"Recursive top-down directory listing for '{self.dir_path}':")
         for name, subdir_names, filenames in self.result:
@@ -250,14 +306,14 @@ class ListRegKeyValues(BaseSessionCommand):
         self.regkeypath = regkeypath
         self.return_json = return_json
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.list_registry_keys(self.regkeypath)
         # return session.list_registry_keys_and_values(self.regkeypath)
 
     def process_result(self):
         results = self.result
         if not results:
-            logging.info("no results.")
+            LOGGER.info("no results.")
             return None
         if self.return_json:
             return json.dumps(results, indent=2, sort_keys=True)
@@ -272,12 +328,13 @@ class ListRegKeyValues(BaseSessionCommand):
 
 class RegKeyValue(BaseSessionCommand):
     """Get the associated value of the specified registry key."""
+    # TODO: add write_results option and make print_results an option
 
     def __init__(self, regkeyvalue: str):
         super().__init__(description=f"Get Registry Key Value @ {regkeyvalue}")
         self.regkeyvalue = regkeyvalue
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.get_registry_value(self.regkeyvalue)
 
     def process_result(self):
@@ -299,7 +356,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
         self._memdump_id = None
         self._cb = None
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         # store a pointer to the CbR object for later
         self._cb = session._cb
         if not self.local_filename:
@@ -348,7 +405,7 @@ class GetFile(BaseSessionCommand):
 
         self.output_filename = output_filename
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         """
         Execute the file transfer.
         Args:
@@ -364,7 +421,10 @@ class GetFile(BaseSessionCommand):
 
         if self.output_filename is None:
             filepath = get_os_independant_filepath(self._file_path)
-            self.output_filename = f"{self.sensor_id}_{filepath.name}"
+            hostname_part = f"{self.hostname}_" if self.hostname else ""
+            self.output_filename = f"{self.sensor_id}_{hostname_part}{filepath.name}"
+        else:
+            self.output_filename = self.fill_placeholders(self.output_filename)
 
         try:
             with open(self.output_filename, "wb") as fp:
@@ -394,7 +454,7 @@ class DeleteFile(BaseSessionCommand):
         super().__init__(description=f"Delete File @ '{file_path}'")
         self._file_path = file_path
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.delete_file(self._file_path)
 
     def process_result(self):
@@ -415,7 +475,7 @@ class KillProcessByID(BaseSessionCommand):
         super().__init__(description=f"Kill Process with ID={pid}")
         self.pid = pid
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.kill_process(self.pid)
 
     def process_result(self):
@@ -434,7 +494,7 @@ class DeleteRegistryKeyValue(BaseSessionCommand):
         super().__init__(description=f"Delete Registry Key:Value @ '{regkeyvalue}'")
         self.regkeyvalue = regkeyvalue
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.delete_registry_value(self.regkeyvalue)
 
     def process_result(self):
@@ -448,7 +508,7 @@ class DeleteRegistryKey(BaseSessionCommand):
         super().__init__(description=f"Delete Registry Key @ '{regkey}'")
         self.regkey = regkey
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         return session.delete_registry_key(self.regkey)
 
     def process_result(self):
@@ -469,13 +529,13 @@ class KillProcessByName(BaseSessionCommand):
         self.pname = process_name
         self.nested_commands = {}
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         from cbinterface.helpers import get_os_independant_filepath
 
         for process in session.list_processes():
             filepath = get_os_independant_filepath(process["path"])
             if self.pname in filepath.name:
-                logging.info(f"found process to kill: {process['path']} - pid={process['pid']}")
+                LOGGER.info(f"found process to kill: {process['path']} - pid={process['pid']}")
                 self.nested_commands[process["pid"]] = session.kill_process(process["pid"])
 
         return True
@@ -490,8 +550,6 @@ class KillProcessByName(BaseSessionCommand):
 
 
 """ Not used: left as an example of recursive command."""
-
-
 class RecursiveKillProcessByName(BaseSessionCommand):
     """Recursivly terminate a process by process name.
 
@@ -505,7 +563,7 @@ class RecursiveKillProcessByName(BaseSessionCommand):
         self.pname = process_name
         self.local_session_manager = None
 
-    def run(self, session: LiveResponseSession):
+    def run(self, session: CbLRSessionBase):
         from cbinterface.helpers import get_os_independant_filepath
         from cbinterface.response.sessions import CustomLiveResponseSessionManager
 
@@ -513,7 +571,7 @@ class RecursiveKillProcessByName(BaseSessionCommand):
         for process in session.list_processes():
             filepath = get_os_independant_filepath(process["path"])
             if self.pname in filepath.name:
-                logging.info(f"found process to kill: {process['path']} - pid={process['pid']}")
+                LOGGER.info(f"found process to kill: {process['path']} - pid={process['pid']}")
                 cmd = KillProcessByID(process["pid"])
                 self.local_session_manager.submit_command(cmd, self.sensor_id)
 

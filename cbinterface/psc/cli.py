@@ -36,7 +36,7 @@ from cbinterface.psc.process import (
     print_scriptloads,
     process_to_dict,
 )
-from cbinterface.psc.commands import (
+from cbinterface.commands import (
     PutFile,
     ProcessListing,
     GetFile,
@@ -63,7 +63,9 @@ from cbinterface.psc.sessions import (
     get_session_commands,
     get_command_result,
     get_file_content,
+    close_session_by_id
 )
+from cbinterface.playbooks import build_playbook_commands
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
 
@@ -414,6 +416,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 commands.append(cmd)
                 LOGGER.info(f"recorded command: {cmd}")
 
+        # Playbook execution #
+        if args.live_response_command and ( args.live_response_command.startswith("play") or args.live_response_command == "pb"):
+            playbook_commands = build_playbook_commands(args.playbook_configpath)
+            commands.extend(playbook_commands)
+            LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
+            
         # Handle LR commands #
         if commands:
             timeout = 1200  # default 20 minutes (same used by Cb)
@@ -450,7 +458,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
     # Direct Session Interaction #
     if args.command and args.command.startswith("s"):
-        cb = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
         #if args.list_all_sessions:
             # Not implemented with PSC
@@ -458,22 +466,20 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             # Not implemented with PSC
 
         if args.get_session_command_list:
-            print(json.dumps(get_session_commands(cb, args.get_session_command_list), indent=2, sort_keys=True))
+            print(json.dumps(get_session_commands(cblr, args.get_session_command_list), indent=2, sort_keys=True))
 
         if args.get_session:
-            print(json.dumps(get_session_by_id(cb, args.get_session), indent=2, sort_keys=True))
+            print(json.dumps(get_session_by_id(cblr, args.get_session), indent=2, sort_keys=True))
 
         if args.close_session:
-            session_manager = CustomLiveResponseSessionManager(cb)
-            session_manager._close_session(args.close_session)
-            print(json.dumps(get_session_by_id(cb, args.close_session), indent=2, sort_keys=True))
+            print(json.dumps(close_session_by_id(cblr, args.close_session), indent=2, sort_keys=True))
 
         if args.get_command_result:
             session_id, device_id, command_id = args.get_command_result.split(":", 2)
             session_id = f"{session_id}:{device_id}"
-            print(json.dumps(get_command_result(cb, session_id, command_id), indent=2, sort_keys=True))
+            print(json.dumps(get_command_result(cblr, session_id, command_id), indent=2, sort_keys=True))
 
         if args.get_file_content:
             session_id, device_id, file_id = args.get_file_content.split(":", 2)
             session_id = f"{session_id}:{device_id}"
-            get_file_content(cb, session_id, file_id)
+            get_file_content(cblr, session_id, file_id)
