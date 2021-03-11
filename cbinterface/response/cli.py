@@ -53,7 +53,8 @@ from cbinterface.commands import (
     GetSystemMemoryDump,
 )
 from cbinterface.response.enumerations import logon_history
-from cbinterface.playbooks import build_playbook_commands
+from cbinterface.config import get_playbook_map
+from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
 LOGGER = logging.getLogger("cbinterface.response.cli")
 
@@ -80,35 +81,6 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
         action="store_true",
         default=False,
         help="Print all available process info (all fields).",
-    )
-
-    """
-    # session parser
-    parser_session = subparsers.add_parser("session", aliases=["s"], help="get session data")
-    parser_session.add_argument(
-        "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID."
-    )
-    parser_session.add_argument(
-        "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
-    )
-    parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions.")
-    parser_session.add_argument("-g", "--get-session", action="store", help="get live response session by id.")
-    parser_session.add_argument("-c", "--close-session", action="store", help="close live response session by id.")
-    parser_session.add_argument(
-        "-gcr", "--get-command-result", action="store", help="get any results for this command."
-    )
-    parser_session.add_argument(
-        "-f", "--get-file-content", action="store", help="byte stream any file content to stdout. (use a pipe)"
-    )
-    """
-
-    # enumeration parser
-    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="get enumeration data")
-    parser_enumeration.add_argument(
-        "-lh",
-        "--logon-history",
-        action="store",
-        help="given username or hostname, enumerate logon history (Windows OS).",
     )
 
 
@@ -391,13 +363,25 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 commands.append(cmd)
                 LOGGER.info(f"recorded command: {cmd}")
 
+            if args.remediation_script:
+                remediation_commands = build_remediation_commands(args.remediation_script)
+                LOGGER.info(f"created {len(remediation_commands)} remediation commands from {args.remediation_script}")
+                commands.extend(remediation_commands)
+
         # Playbook execution #
         if args.live_response_command and (
             args.live_response_command.startswith("play") or args.live_response_command == "pb"
         ):
-            playbook_commands = build_playbook_commands(args.playbook_configpath)
-            commands.extend(playbook_commands)
-            LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
+            if args.playbook_configpath:
+                playbook_commands = build_playbook_commands(args.playbook_configpath)
+                commands.extend(playbook_commands)
+                LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
+            if args.playbook_name:
+                playbook_data = get_playbook_map()[args.playbook_name]
+                playbook_path = playbook_data['path']
+                playbook_commands = build_playbook_commands(playbook_path)
+                commands.extend(playbook_commands)
+                LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
 
         # Handle LR commands #
         if commands:
@@ -434,7 +418,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
             session_manager.process_completed_commands()
 
     # Direct Session Interaction #
-    if args.command and args.command.startswith("s"):
+    if args.command and args.command.startswith("sess"):
         if args.list_sensor_sessions:
             print(
                 json.dumps(

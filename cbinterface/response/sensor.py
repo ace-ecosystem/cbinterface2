@@ -11,7 +11,7 @@ from cbapi.response.models import SensorQuery
 
 from cbinterface.helpers import as_configured_timezone
 
-LOGGER = logging.getLogger("cbinterface.sensor")
+LOGGER = logging.getLogger("cbinterface.response.sensor")
 
 
 def is_sensor_online(s: SensorQuery) -> bool:

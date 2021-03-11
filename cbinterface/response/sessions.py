@@ -116,7 +116,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         work_item = WorkItem(command.run, sensor_id)
         self._job_scheduler.submit_job(work_item)
         command.future = work_item.future
-        command.sensor_id = sensor_id
+        command._sensor_id = sensor_id
         command.session_id = self._sessions[sensor_id].session_id
         command.session_data = self._sessions[sensor_id].session_data
         self.commands.append(command)
@@ -153,7 +153,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
     def process_completed_commands(self):
         for cmd in self.yield_completed_commands():
-            LOGGER.info(f"processing => {cmd}")
+            LOGGER.debug(f"processing => {cmd}")
             cmd.process_result()
 
     def _keep_active_sessions_alive_thread(self):

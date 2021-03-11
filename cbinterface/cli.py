@@ -3,7 +3,6 @@
 import os
 import re
 
-# import sys
 import time
 import argparse
 import argcomplete
@@ -27,10 +26,12 @@ from cbinterface.config import (
     get_default_cbapi_profile,
     set_default_cbapi_profile,
     set_default_cbapi_product,
+    get_playbook_map
 )
 
 from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
 from cbinterface.psc.cli import add_psc_arguments_to_parser, execute_threathunter_arguments
+from cbinterface.scripted_live_response import write_playbook_template, write_remediation_template
 
 LOGGER = logging.getLogger("cbinterface.cli")
 
@@ -254,11 +255,16 @@ def main():
     parser_put_file.add_argument("local_filepath", action="store", help="Path to the file.")
     parser_put_file.add_argument("sensor_write_filepath", action="store", help="Path to write the file on the sensor.")
 
-    # live response put file parser
+    # live response playbook parser
     parser_playbook = lr_subparsers.add_parser(
         "playbook", aliases=["pb", "play"], help="execute a live response playbook script"
     )
-    parser_playbook.add_argument("playbook_configpath", action="store", help="Path to the plybook config file.")
+    parser_playbook.add_argument("-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute.")
+    playbook_map = get_playbook_map()
+    playbook_names = [p['name'] for _,p in playbook_map.items()]
+    parser_playbook.add_argument("-p", "--playbook-name", action="store", choices=playbook_names, help="The name of a configured playbook to execute.")
+    parser_playbook.add_argument("-l", "--list-playbooks", action="store_true", help="List configured playbooks.")
+    parser_playbook.add_argument("--write-template", action="store_true", help="write a playbook template file to use as example.")
 
     # live response collect parser
     parser_collect = lr_subparsers.add_parser("collect", help="collect artifacts from hosts")
@@ -297,16 +303,18 @@ def main():
     parser_remediate.add_argument(
         "--delete-entire-regkey", action="store", help="Delete the registry key and all values. BE CAREFUL."
     )
+    parser_remediate.add_argument("-rs", "--remediation-script", action="store", help="Path to a remediaiton script.")
+    parser_remediate.add_argument("--write-template", action="store_true", help="write a remediation template.")
 
-    # session parser - XXX
-    parser_session = subparsers.add_parser("session", aliases=["s"], help="get session data")
+    # session parser - NOTE: functionality is limited on the PSC side.
+    parser_session = subparsers.add_parser("session", aliases=["sess"], help="get session data")
     parser_session.add_argument(
-        "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID."
+        "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID (Response only)."
     )
     parser_session.add_argument(
         "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
     )
-    parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions.")
+    parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only).")
     parser_session.add_argument("-g", "--get-session", action="store", help="get live response session by id.")
     parser_session.add_argument("-c", "--close-session", action="store", help="close live response session by id.")
     parser_session.add_argument(
@@ -314,6 +322,15 @@ def main():
     )
     parser_session.add_argument(
         "-f", "--get-file-content", action="store", help="byte stream any file content to stdout. (use a pipe)"
+    )
+
+    # enumeration parser
+    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="get enumeration data")
+    parser_enumeration.add_argument(
+        "-lh",
+        "--logon-history",
+        action="store",
+        help="given username or device hostname, roughly enumerate logon history (Windows OS).",
     )
 
     # only add independent product args if product is a configured option
@@ -345,6 +362,29 @@ def main():
         set_default_cbapi_product(product)
         set_default_cbapi_profile(profile)
         save_configuration()
+
+    # handle this here to save time
+    if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
+        if args.live_response_command and (
+                args.live_response_command.startswith("play") or args.live_response_command == "pb"
+            ):
+            if args.list_playbooks:
+                print(f"\nConfigured Playbooks:")
+                for pb_key, pb_metadata in playbook_map.items():
+                    print(f"\t{pb_metadata['name']} : {pb_metadata['description']}")
+                print()
+                return True
+            if args.write_template:
+                template_path = write_playbook_template()
+                if os.path.exists(template_path):
+                    LOGGER.info(f" + wrote {template_path}")
+                return True
+        if args.live_response_command and args.live_response_command.startswith("r"):
+            if args.write_template:
+                template_path = write_remediation_template()
+                if os.path.exists(template_path):
+                    LOGGER.info(f" + wrote {template_path}")
+                return True
 
     # XXX create custom wrapper that will catch timeout errors?
     # catch this raise cbapi/connection.py#L266

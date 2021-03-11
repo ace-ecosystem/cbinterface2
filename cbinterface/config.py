@@ -3,6 +3,7 @@
 
 import os
 import logging
+import glob
 
 from configparser import ConfigParser
 from dateutil import tz
@@ -96,3 +97,35 @@ def get_default_cbapi_profile():
 
 if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
     set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))
+
+
+def get_playbook_map():
+    """Load playbook config file map.
+
+    Returns: dict of playbook name to playbook config path.
+    """
+    playbook_map = {}
+    # package included playbooks
+    playbook_paths =  glob.glob(f"{HOME_PATH}/playbook_configs/*.ini")
+    # configured playbooks
+    if CONFIG.has_section('playbooks'):
+        playbook_paths.extend(list(CONFIG['playbooks'].values()))
+
+    for playbook_path in glob.glob(f"{HOME_PATH}/playbook_configs/*.ini"):
+        playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
+        playbook = ConfigParser()
+        try:
+            playbook.read(playbook_path)
+        except Exception as e:
+            LOGGER.error(f"could not load playbook: {e}")
+            continue
+        if playbook_name in playbook_map:
+            LOGGER.error(f"playbook name collision on '{playbook_name}'. skipping this one...")
+            continue
+        playbook_name = playbook.get('overview', 'name', fallback=playbook_name)
+        playbook_description = playbook.get('overview', 'description', fallback="")
+        playbook_map[playbook_name] = {'path': playbook_path,
+                                       'name': playbook_name,
+                                       'description': playbook_description}
+
+    return playbook_map

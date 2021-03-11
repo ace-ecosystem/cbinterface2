@@ -19,7 +19,7 @@ class BaseSessionCommand:
     Session Commands are 'jobs' with concurrent.futures.
     """
 
-    def __init__(self, description):
+    def __init__(self, description, placeholders={}):
         self.description = description
         self.future = None
         self.session_id = None
@@ -29,7 +29,7 @@ class BaseSessionCommand:
         self._exception = None
         self._result = None
         self._hostname = None
-        self.placeholders = {}
+        self.placeholders = placeholders
 
     def fill_placeholders(self, string_item: str, placeholders={}):
         # fill common placeholders
@@ -37,7 +37,9 @@ class BaseSessionCommand:
         placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
-        return string_item.format(**placeholders)
+        placeholders['BASE_DIR'] = placeholders.get("BASE_DIR", "C:\\Windows\\System32")
+        string_item = string_item.format(**placeholders)
+        return string_item
 
     @property
     def hostname(self):
@@ -47,7 +49,7 @@ class BaseSessionCommand:
 
     @property
     def sensor_id(self):
-        return self.session_data.get("sensor_id")
+        return self.session_data.get("sensor_id") or self._sensor_id
 
     @property
     def initiatied(self):
@@ -115,12 +117,13 @@ class BaseSessionCommand:
 class PutFile(BaseSessionCommand):
     """Get process listing via Live Response."""
 
-    def __init__(self, local_filepath, sensor_write_filepath):
-        super().__init__(description="Put file on device")
+    def __init__(self, local_filepath, sensor_write_filepath, **kwargs):
+        super().__init__(description="Put file on device", **kwargs)
         self.local_filepath = local_filepath
         self.sensor_write_filepath = sensor_write_filepath
 
     def run(self, session: CbLRSessionBase):
+        self.sensor_write_filepath = self.fill_placeholders(self.sensor_write_filepath)
         try:
             with open(self.local_filepath, "rb") as fp:
                 data = fp.read()
@@ -206,8 +209,9 @@ class ExecuteCommand(BaseSessionCommand):
         wait_for_completion=True,
         print_results=True,
         write_results_path=False,
+        **kwargs
     ):
-        super().__init__(description=f"Execute {command}")
+        super().__init__(description=f"Execute {command}", **kwargs)
         self._command_string = command
         self.wait_for_output = wait_for_output
         self.remote_output_file_name = remote_output_file_name
@@ -363,8 +367,10 @@ class RegKeyValue(BaseSessionCommand):
 
 
 class GetSystemMemoryDump(BaseSessionCommand):
-    """Perform a memory dump operation on the sensor."""
-
+    """Perform a memory dump operation on the sensor.
+    
+    NOTE: Not a fan of Cb's implementation.
+    """
     def __init__(self, local_filename: str = "", compress=True):
         super().__init__(description=f"Dump System Memory")
         self.local_filename = local_filename
@@ -406,7 +412,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
 class GetFile(BaseSessionCommand):
     """Object that retrieves a file via Live Response."""
 
-    def __init__(self, file_path, output_filename: Union[str, bool] = None):
+    def __init__(self, file_path, output_filename: Union[str, bool] = None, **kwargs):
         """
         Initialize the GetFile command.
 
@@ -416,7 +422,7 @@ class GetFile(BaseSessionCommand):
         Returns:
             True on success, False on failure.
         """
-        super().__init__(description=f"getFile @ '{file_path}'")
+        super().__init__(description=f"getFile @ '{file_path}'", **kwargs)
         self._file_path = file_path
 
         self.output_filename = output_filename
@@ -429,6 +435,7 @@ class GetFile(BaseSessionCommand):
         Returns:
             File content
         """
+        self._file_path = self.fill_placeholders(self._file_path)
         return session.get_raw_file(self._file_path)
 
     def process_result(self):
@@ -443,6 +450,11 @@ class GetFile(BaseSessionCommand):
             self.output_filename = self.fill_placeholders(self.output_filename)
 
         try:
+            if os.path.exists(self.output_filename):
+                LOGGER.debug(f"{self.output_filename} already exists. appending epoch time")
+                _now = str(time.time())
+                _now = _now[:_now.rfind(".")]
+                self.output_filename = f"{_now}_{self.output_filename}"
             with open(self.output_filename, "wb") as fp:
                 content_handle = self.result
                 fp.write(content_handle.read())

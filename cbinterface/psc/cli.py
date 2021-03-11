@@ -71,7 +71,9 @@ from cbinterface.psc.sessions import (
     get_file_content,
     close_session_by_id,
 )
-from cbinterface.playbooks import build_playbook_commands
+from cbinterface.psc.enumerations import logon_history
+from cbinterface.config import get_playbook_map
+from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
 
@@ -217,12 +219,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.facets:
             LOGGER.info("getting facet data...")
-            # print_facet_histogram(processes)
-            from cbinterface.psc.query import print_facet_histogram_v2
+            print_facet_histogram(processes)
+            # NOTE TODO - pick this v2 back up and see if it's more efficient to use
+            # knowing we have to remember the childproc_name facet data we like.
+            #from cbinterface.psc.query import print_facet_histogram_v2
+            #print_facet_histogram_v2(cb, args.query)
 
-            print_facet_histogram_v2(cb, args.query)
-
-        return
         # don't display large results by default
         print_results = True
         if not args.no_warnings and len(processes) > 10:
@@ -240,6 +242,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     print_process_info(proc, raw_print=args.all_details, header=False)
 
         return True
+
+    # Enumerations #
+    if args.command and args.command == "enumerate":
+        if args.logon_history:
+            logon_history(cb, args.logon_history)
+            return
 
     # Process Inspection #
     if args.command and (args.command == "proc" or args.command.startswith("i")):
@@ -427,13 +435,25 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 commands.append(cmd)
                 LOGGER.info(f"recorded command: {cmd}")
 
+            if args.remediation_script:
+                remediation_commands = build_remediation_commands(args.remediation_script)
+                LOGGER.info(f"created {len(remediation_commands)} remediation commands from {args.remediation_script}")
+                commands.extend(remediation_commands)
+
         # Playbook execution #
         if args.live_response_command and (
             args.live_response_command.startswith("play") or args.live_response_command == "pb"
         ):
-            playbook_commands = build_playbook_commands(args.playbook_configpath)
-            commands.extend(playbook_commands)
-            LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
+            if args.playbook_configpath:
+                playbook_commands = build_playbook_commands(args.playbook_configpath)
+                commands.extend(playbook_commands)
+                LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
+            if args.playbook_name:
+                playbook_data = get_playbook_map()[args.playbook_name]
+                playbook_path = playbook_data['path']
+                playbook_commands = build_playbook_commands(playbook_path)
+                commands.extend(playbook_commands)
+                LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
 
         # Handle LR commands #
         if commands:
@@ -470,7 +490,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             session_manager.process_completed_commands()
 
     # Direct Session Interaction #
-    if args.command and args.command.startswith("s"):
+    if args.command and args.command.startswith("sess"):
         cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
         # if args.list_all_sessions:

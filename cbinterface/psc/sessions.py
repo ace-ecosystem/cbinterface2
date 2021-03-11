@@ -117,7 +117,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         if isinstance(device, Device):
             device_id = device.id
             command._hostname = device.name
-        LOGGER.info(f"submitting {command} to {device_id}")
+        LOGGER.debug(f"submitting {command} to {device_id}")
 
         if self._job_scheduler is None:
             # spawn the scheduler thread
@@ -170,7 +170,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
     def process_completed_commands(self):
         for cmd in self.yield_completed_commands():
-            LOGGER.info(f"processing => {cmd}")
+            LOGGER.debug(f"processing => {cmd}")
             cmd.process_result()
 
     def _keep_active_sessions_alive_thread(self):

@@ -7,6 +7,9 @@ from dateutil import tz
 
 from typing import Union
 
+# NOTE: boil everything down to CbPSCBaseAPI where possible
+# so "enterprise standard" will work wherever possible?
+#from cbapi.psc.rest_api import CbPSCBaseAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.psc.threathunter.models import AsyncProcessQuery
 
