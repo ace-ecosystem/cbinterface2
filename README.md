@@ -1,15 +1,14 @@
 # cbinterface
 
-`cbinterface` is a command line tool and library for interfacing with multiple carbonblack environments to perform analysis and live response functions. 
+`cbinterface` is a command line tool and library for interfacing with multiple Carbon Black environments to perform analysis and live response functions. 
 
-Primarily supports (what I use it for) Cb Response and Cb PSC Enterprise EDR (threathunter), however, a lot of functionality should also work with Cb Enterprise Standard (defense). If you're using Cb Enterprise Standard and something doesn't work, open an issue and I can likely swap out an underlying object and have it working quickly.
+Primarily supports (what I use it for) Cb Response and Cb PSC Enterprise EDR (Threathunter), however, a lot of functionality should also work with Cb Enterprise Standard (Defense). If you're using Cb Enterprise Standard and something doesn't work, open an issue and I can likely swap out an underlying object and have it working quickly.
 
-## Note this, please.
+## Get-Go Note
 
 This README is pretty much the only documentation, but if you have a question about anything, contact me and I'll answer it. If there is interest, I'll create more documentation around any subject.
 
 Also, if you find any issue at all, let me know and I'll fix it. Additionally, feel free to contact me with general questions or anything else and I will try and help. Open an issue here on Github or email me.
-
 
 # Install
 
@@ -32,11 +31,11 @@ If you're only using one Carbon Black environment, then it's pretty simple; `cbi
 
 ## Carbon Black Environment Selection
 
-You can also specify the environment you want to work with via the following arugment:
+You can also specify the environment you want to work with via the following argument:
 
     cbinterface -e response:default
     
-Additionally, you can also save your default environment persistence:
+Additionally, you can save your default environment persistence:
 
     cbinterface --set-default-enviroment psc:default
     
