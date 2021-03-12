@@ -105,7 +105,7 @@ def main():
 
     # query parser
     parser_query = subparsers.add_parser(
-        "query", aliases=["pq", "q"], help="execute a process search query. 'query -h' for more"
+        "query", aliases=["pq", "q"], help="Execute a process search query. 'query -h' for more"
     )
     parser_query.add_argument("query", help="the process search query you'd like to execute")
     parser_query.add_argument(
@@ -206,19 +206,19 @@ def main():
     parser_inspect.add_argument(
         "--json", action="store_true", help="Combine all results into json document and print the result."
     )
-    parser_inspect.add_argument(
-        "--segment-limit",
-        action="store",
-        type=int,
-        default=None,
-        help="stop processing events into json after this many process segments",
-    )
+    #parser_inspect.add_argument(
+    #    "--segment-limit",
+    #    action="store",
+    #    type=int,
+    #    default=None,
+    #    help="stop processing events into json after this many process segments",
+    #)
 
     # live response parser
     parser_lr = subparsers.add_parser(
-        "live-response", aliases=["lr"], help="perform live response actions on a sensor."
+        "live-response", aliases=["lr"], help="Perform live response actions on a device/sensor."
     )
-    parser_lr.add_argument("hostname_or_sensor_id", help="the hostname or sensor_id to go live with.")
+    parser_lr.add_argument("name_or_id", help="the hostname or sensor/device id to go live with.")
     parser_lr.add_argument(
         "-e", "--execute-command", action="store", help="Execute this command on the sensor. NOTE: waits for output."
     )
@@ -251,13 +251,13 @@ def main():
     lr_subparsers = parser_lr.add_subparsers(dest="live_response_command")
 
     # live response put file parser
-    parser_put_file = lr_subparsers.add_parser("put", help="put a file on the sensor")
+    parser_put_file = lr_subparsers.add_parser("put", help="Put a file on the device/sensor.")
     parser_put_file.add_argument("local_filepath", action="store", help="Path to the file.")
     parser_put_file.add_argument("sensor_write_filepath", action="store", help="Path to write the file on the sensor.")
 
     # live response playbook parser
     parser_playbook = lr_subparsers.add_parser(
-        "playbook", aliases=["pb", "play"], help="execute a live response playbook script"
+        "playbook", aliases=["pb", "play"], help="Execute a live response playbook script."
     )
     parser_playbook.add_argument("-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute.")
     playbook_map = get_playbook_map()
@@ -267,7 +267,7 @@ def main():
     parser_playbook.add_argument("--write-template", action="store_true", help="write a playbook template file to use as example.")
 
     # live response collect parser
-    parser_collect = lr_subparsers.add_parser("collect", help="collect artifacts from hosts")
+    parser_collect = lr_subparsers.add_parser("collect", help="Collect artifacts from hosts.")
     parser_collect.add_argument(
         "-i", "--sensor-info", dest="sensor_info", action="store_true", help="print default sensor information"
     )
@@ -291,7 +291,7 @@ def main():
     )
 
     # live response remediation parser
-    parser_remediate = lr_subparsers.add_parser("remediate", help="remdiation (delete/kill) actions")
+    parser_remediate = lr_subparsers.add_parser("remediate", help="Perform remdiation (delete/kill) actions on device/sensor.")
     parser_remediate.add_argument(
         "-f", "--delete-file-path", action="store", help="delete the file at this path on the sensor"
     )
@@ -306,15 +306,18 @@ def main():
     parser_remediate.add_argument("-rs", "--remediation-script", action="store", help="Path to a remediaiton script.")
     parser_remediate.add_argument("--write-template", action="store_true", help="write a remediation template.")
 
-    # session parser - NOTE: functionality is limited on the PSC side.
-    parser_session = subparsers.add_parser("session", aliases=["sess"], help="get session data")
-    parser_session.add_argument(
-        "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID (Response only)."
-    )
+    # session parser - NOTE: functionality is limited on the PSC side, and it's specifically annoying that
+    # we can not get a list of active psc lr sessions... or at least I haven't figure out how to do that.
+    parser_session = subparsers.add_parser("session", help="Interact with Cb live response server sessions.")
+    if configured_products["response"]:
+        parser_session.add_argument(
+            "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID (Response only)."
+        )
     parser_session.add_argument(
         "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
     )
-    parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only).")
+    if configured_products["response"]:
+        parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only).")
     parser_session.add_argument("-g", "--get-session", action="store", help="get live response session by id.")
     parser_session.add_argument("-c", "--close-session", action="store", help="close live response session by id.")
     parser_session.add_argument(
@@ -325,12 +328,12 @@ def main():
     )
 
     # enumeration parser
-    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="get enumeration data")
+    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="Data enumerations for answering common questions.")
     parser_enumeration.add_argument(
         "-lh",
         "--logon-history",
         action="store",
-        help="given username or device hostname, roughly enumerate logon history (Windows OS).",
+        help="Given process username or device name, roughly enumerate logon history (Windows OS).",
     )
 
     # only add independent product args if product is a configured option
@@ -341,10 +344,6 @@ def main():
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-
-    """
-    XXX: Create a SINGLE background daemon service that can be launched to track and manage jobs?
-    """
 
     if args.debug:
         logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
@@ -363,7 +362,7 @@ def main():
         set_default_cbapi_profile(profile)
         save_configuration()
 
-    # handle this here to save time
+    # Functionality that doesn't require a Cb connection.
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
         if args.live_response_command and (
                 args.live_response_command.startswith("play") or args.live_response_command == "pb"
@@ -386,10 +385,7 @@ def main():
                     LOGGER.info(f" + wrote {template_path}")
                 return True
 
-    # XXX create custom wrapper that will catch timeout errors?
-    # catch this raise cbapi/connection.py#L266
-    # and log an critical error instead of barffing on the terminal.
-    # ALSO catch: cbapi.errors.ServerError: Received error code 504 from API
+    # Connect and execute
     product, profile = args.environment.split(":", 1)
     try:
         if product == "response":
@@ -405,3 +401,5 @@ def main():
         LOGGER.critical(f"{e}")
     except ServerError as e:
         LOGGER.critical(f"CB ServerError: {e}")
+    except TimeoutError as e:
+        LOGGER.critical(f"TimeoutError waiting for CB server 🙄 (try again) : {e}")

@@ -1,3 +1,11 @@
+"""Functionality that supports live response "scripts".
+
+In IDR, people like to call things like this playbooks. So, playbooks,
+and also remediation scripts to allow for mass remediations.
+
+TODO: Implemented collection scripts for mass collections.
+"""
+
 import os
 import logging
 
@@ -68,12 +76,14 @@ LR_REMEDIATION_MAP = {'pids': KillProcessByID,
 # Get the working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Playbook section begins #
+
 PLAYBOOK_TEMPLATE_PATH=os.path.join(BASE_DIR, 'templates/playbook.ini')
 
 def write_playbook_template(template_path=PLAYBOOK_TEMPLATE_PATH):
     """Write the example template to the current working dir."""
     from shutil import copyfile
-    destination = 'playbook.ini'
+    destination = template_path[template_path.rfind("/")+1:]
     copyfile(template_path, destination)
     return destination
 
@@ -188,7 +198,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
             command_string = playbook[command]["command"]
             wait_for_output = playbook[command].getboolean("wait_for_output", True)
             remote_output_file_name = playbook[command].get("remote_output_file_name", None)
-            working_directory = playbook[command].getboolean("working_directory", None)
+            working_directory = playbook[command].get("working_directory", None)
             wait_timeout = playbook[command].getint("wait_timeout", 30)
             wait_for_completion = playbook[command].getboolean("wait_for_completion", True)
             print_results = playbook[command].getboolean("print_results", True)
@@ -216,7 +226,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                 original_fp = file_path
                 file_path = os.path.join(BASE_DIR, file_path)
                 if not os.path.exists(file_path):
-                    LOGGER.error("Not found: '{original_fp}' OR '{file_path}'")
+                    LOGGER.error(f"Not found: '{original_fp}' OR '{file_path}'")
                     return False
 
             file_name = get_os_independant_filepath(file_path).name
@@ -270,7 +280,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
 
     return ready_live_response_commands
 
-
+# Remediation section begins #
 
 REMEDIATION_TEMPLATE_PATH=os.path.join(BASE_DIR, 'templates/remediate.ini')
 

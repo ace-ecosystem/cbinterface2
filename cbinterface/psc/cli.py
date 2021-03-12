@@ -330,9 +330,9 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         LOGGER.info(f"searching for device...")
         device = None
         try:  # if device.id
-            device = Device(cb, args.hostname_or_sensor_id)
+            device = Device(cb, args.name_or_id)
         except ClientError:
-            device = find_device_by_hostname(cb, args.hostname_or_sensor_id)
+            device = find_device_by_hostname(cb, args.name_or_id)
 
         if not device:
             LOGGER.info(f"could not find a device.")

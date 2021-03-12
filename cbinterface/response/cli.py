@@ -247,10 +247,10 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
         commands = []
 
         try:
-            sensor = Sensor(cb, args.hostname_or_sensor_id, force_init=True)
+            sensor = Sensor(cb, args.name_or_id, force_init=True)
         except ObjectNotFoundError:
             LOGGER.info(f"searching for sensor...")
-            sensor = find_sensor_by_hostname(cb, args.hostname_or_sensor_id)
+            sensor = find_sensor_by_hostname(cb, args.name_or_id)
 
         if not sensor:
             LOGGER.info(f"could not find a sensor.")
