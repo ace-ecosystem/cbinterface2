@@ -31,7 +31,9 @@ If you're only using one Carbon Black environment, then it's pretty simple; `cbi
 
 ## Carbon Black Environment Selection
 
-You can also specify the environment you want to work with via the following argument:
+If you have more than one environment or your default environment is not named `defaut`, you'll have to select/set the environment you want to work with.
+
+You can specify the environment you want to work with via the following argument:
 
     cbinterface -e response:default
     
@@ -44,12 +46,12 @@ Additionally, you can save your default environment persistence:
     
 ## Your Timezone
 
-The default timezone is UTC. You can set your timezone persistence to whatever you want with the `--set-default-timezone` option:
+The default time zone is UTC. You can set your time zone persistence to whatever you want with the `--set-default-timezone` option:
 
 `cbinterface --set-default-timezone Europe/Rome`
 
 
-You can also specify a timezone to convert all timestamps to with the `-tz` option. This is helpful if you want to see events in different timezones. For example, our team standardized on UTC for Incident Response time-lines.
+You can also specify a time zone to convert all timestamps to with the `-tz` option. This is helpful if you want to see events in different time zones. For example, our team standardized on UTC for Incident Response time-lines.
 
 
 # Functionality
@@ -405,7 +407,7 @@ $ cbinterface device 174.87.68.13
 
 ### Fields? 
 
-I didn't find device search field documentation. Please point me to it if you know where it's at. It appears they device search fields map to the PSC Device model, although, this is not perfect. Some fields do not work. For convienience, you can get a list of these fields like this:
+I didn't find device search field documentation. Please point me to it if you know where it's at. It appears the device search fields map to the PSC Device model, although, this is not perfect. Some fields do not work. For convenience, you can get a list of these fields like this:
 
 ```
 $ cbinterface device FIELDS
@@ -804,7 +806,7 @@ from cbinterface.commands import (
 )
 ```
 
-These become building blocks for live response "playbooks" and scripts. Collecting browsing history is an example of a playbook. Remediating a NanoCore infections with a remediation script is an example of a, well, script.
+These become building blocks for live response "playbooks" and scripts. Collecting browsing history is an example of a playbook. Remediating a NanoCore infection with an example of a script.
 
 
 ## Live Response Playbooks
@@ -927,3 +929,83 @@ command=cmd.exe /c del my_cool_thing.bat
 ;# Now you can go on with however many command sections you desire and 
 ;# in whatever order to accommplish whatever need. Be wise.
 ```
+
+
+## Live Response Remediation Scripts
+
+To adequately respond to an infection, you often need to perform multiple remediation actions to achieve your goal. It's always the best case to identify everything that needs remediation and clean it up in one single pass. This type of single pass remediation helps ensure watch dog processes and other persistent mechanisms are cleaned up before a malicious infection can re-gain a persistent foothold. It’s an all out blitz attack on the malicious infection. When you attack on all fronts at, at the same time, you're more likely to be successful.
+
+As mentioned above, in the Live Response Remediation section, you can use the following command to write a remediation template:
+
+```
+$ cbinterface lr deviceNameOrIdHere remediate --write-template 
+2021-03-13 18:45:10 analysis cbinterface.cli[32418] INFO  + wrote remediate.ini
+```
+
+The contnet of remediate.ini file:
+
+```
+## Example remediate routine file.
+##  All keys are commented out under their respective sections by default.
+# Remediation is performed in the following order:
+#  1. Kill running processes
+#  2. Delete registry locations
+#  3. Delete scheduled tasks
+#  4. Delete services
+#  5. Delete files
+#  6. Delete directories
+
+# Specify full paths to files that you want to delete.
+#  ex: file1=c:\programdata\lemontrack installer\winserv.exe
+[files]
+;file1=
+;file2=
+;file3=
+
+# Specify processes that you want to kill by name. All processes matching the name will be killed
+#  ex: proc1=winserv.exe
+[process_names]
+;proc1=
+;proc2=
+;proc3=
+
+# Delete a scheduled task
+#  ex: task1=TaskFolder\DHCP Monitor Task
+[scheduled_tasks]
+;task1=
+;task2=
+
+# SC delete services by their name
+# Not yet Implemented with CbLR
+[services]
+;service1=
+;service2=
+ 
+# Delete entire directories
+#  ex: directory1=C:\ProgramData\LemonTrack Installer
+[directories]
+;directory1=
+;directory2=
+
+# Delete processes by their ID
+#  ex: pid1=2664
+[pids]
+;pid1=
+;pid2=
+
+# delete individual registry key-values
+#  ex: reg1=HKU\S-1-5-21-1660022851-2357930215-3100199371-1001\Software\Microsoft\Windows\CurrentVersion\Run\LemonTrack
+#  This translates to: REG DELETE "HKU\S-1-5-21-1660022851-2357930215-3100199371-1001\Software\Microsoft\Windows\CurrentVersion\Run" /v LemonTrack /f
+[registry_values]
+;reg1=
+;reg2=
+
+# delete all values behing a key
+#  ex: reg1=HKLM\Software\Microsoft\Windows\CurrentVersion\Run
+#  REG DELETE HKLM\Software\Microsoft\Windows\CurrentVersion\Run /f
+[registry_keys]
+;reg1=
+;reg2=
+```
+
+
