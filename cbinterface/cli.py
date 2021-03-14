@@ -400,6 +400,6 @@ def main():
     except UnauthorizedError as e:
         LOGGER.critical(f"{e}")
     except ServerError as e:
-        LOGGER.critical(f"CB ServerError: {e}")
+        LOGGER.critical(f"CB ServerError 😒 (try again) : {e}")
     except TimeoutError as e:
         LOGGER.critical(f"TimeoutError waiting for CB server 🙄 (try again) : {e}")

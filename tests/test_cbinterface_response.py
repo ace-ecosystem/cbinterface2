@@ -374,4 +374,5 @@ def test_utc_offset_to_potential_tz_names():
     zones = utc_offset_to_potential_tz_names(timedelta(hours=5, minutes=30))
     assert len(zones) == 3
     zones = utc_offset_to_potential_tz_names(timedelta(hours=-5))
-    assert len(zones) == 47
+    # daylight saving time
+    assert len(zones) == 47 or len(zones) == 35

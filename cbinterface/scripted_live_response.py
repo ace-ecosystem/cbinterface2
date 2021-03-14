@@ -49,7 +49,7 @@ REQUIRED_CMD_KEYS = ["operation"]
 REQUIRED_OP_KEY_MAP = {
     "RUN": ["command"],
     "UPLOAD": ["path"],
-    "DOWNLOAD": ["file_path"],
+    "DOWNLOAD": ["file_path", "client_file_path"],
 }
 """ # remove?
 OPTIONAL_CMD_KEYS = ['wait_for_completion', 'get_results']
@@ -88,6 +88,7 @@ def write_playbook_template(template_path=PLAYBOOK_TEMPLATE_PATH):
     return destination
 
 def playbook_missing_required_keys(config, KEYS):
+    """Return True if a playbook is missing required keys."""
     for key in KEYS:
         for section in config.sections():
             if section in IGNORED_SECTIONS:
@@ -99,6 +100,7 @@ def playbook_missing_required_keys(config, KEYS):
 
 
 def operation_missing_required_keys(config, section, KEYS):
+    """Return True if an operation is missing required keys."""
     for key in KEYS:
         if not config.has_option(section, key):
             LOGGER.error(
@@ -193,6 +195,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
 
     for command in playbook_commands:
         op = playbook[command]["operation"].upper()
+        post_completion_command = playbook[command].get("post_completion_command", None)
 
         if op == "RUN":
             command_string = playbook[command]["command"]
@@ -213,7 +216,8 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                 wait_for_completion=wait_for_completion,
                 print_results=print_results,
                 write_results_path=write_results_path,
-                placeholders = placeholders
+                placeholders=placeholders,
+                post_completion_command=post_completion_command
             )
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
@@ -231,7 +235,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
 
             file_name = get_os_independant_filepath(file_path).name
 
-            cmd = PutFile(file_path, sensor_write_filepath=client_file_path, placeholders=placeholders)
+            cmd = PutFile(file_path, sensor_write_filepath=client_file_path, placeholders=placeholders, post_completion_command=post_completion_command)
             cmd.description = f"Put '{file_name}' on device @ '{client_file_path}'"
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
@@ -239,7 +243,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
         elif op == "UPLOAD" or op == "GET":
             path = playbook[command]["path"]
             write_results_path = playbook[command].get("write_results_path", None)
-            cmd = GetFile(path, output_filename=write_results_path, placeholders=placeholders)
+            cmd = GetFile(path, output_filename=write_results_path, placeholders=placeholders, post_completion_command=post_completion_command)
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
 

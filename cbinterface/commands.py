@@ -12,6 +12,8 @@ from cbapi.live_response_api import CbLRSessionBase
 
 LOGGER = logging.getLogger("cbinterface.command")
 
+# the cbinterface directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class BaseSessionCommand:
     """For storing and managing session commands.
@@ -19,7 +21,7 @@ class BaseSessionCommand:
     Session Commands are 'jobs' with concurrent.futures.
     """
 
-    def __init__(self, description, placeholders={}):
+    def __init__(self, description, placeholders={}, post_completion_command=None):
         self.description = description
         self.future = None
         self.session_id = None
@@ -29,7 +31,8 @@ class BaseSessionCommand:
         self._exception = None
         self._result = None
         self._hostname = None
-        self.placeholders = placeholders
+        self.placeholders = placeholders 
+        self.post_completion_command = post_completion_command
 
     def fill_placeholders(self, string_item: str, placeholders={}):
         # fill common placeholders
@@ -37,7 +40,7 @@ class BaseSessionCommand:
         placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
-        placeholders['BASE_DIR'] = placeholders.get("BASE_DIR", "C:\\Windows\\System32")
+        placeholders['WORK_DIR'] = placeholders.get("WORK_DIR", "C:\\Windows\\System32")
         string_item = string_item.format(**placeholders)
         return string_item
 
@@ -101,6 +104,23 @@ class BaseSessionCommand:
         """Implement logic to process any results."""
         pass
 
+    def execute_post_completion(self):
+        if not self.post_completion_command:
+            return None
+        if self.status != 'complete':
+            return False
+        self.post_completion_command = self.fill_placeholders(self.post_completion_command)
+        if self.post_completion_command.startswith("tools/"):
+            self.post_completion_command = f"{BASE_DIR}/{self.post_completion_command}"
+        LOGGER.info(f"executing post completion command: {self.post_completion_command}")
+        import shlex, subprocess
+        try:
+            args = shlex.split(self.post_completion_command)
+            return subprocess.run(args=args)
+        except Exception as e:
+            LOGGER.error(f"caught exception executing post completion command: {e}")
+            return False
+
     def __str__(self):
         txt = f"LrSessionCommand: {self.description}"
         if self.hostname:
@@ -134,6 +154,8 @@ class PutFile(BaseSessionCommand):
     def process_result(self):
         # it worked if execution makes it here
         LOGGER.info(f"put '{self.sensor_write_filepath}' on {self.hostname} via session {self.session_id}")
+        if self.post_completion_command:
+            self.execute_post_completion()
         return True
 
 
@@ -238,6 +260,8 @@ class ExecuteCommand(BaseSessionCommand):
 
     def process_result(self):
         LOGGER.debug(f"{self} took {self.elapsed_time} to return.")
+        if self.post_completion_command:
+            self.execute_post_completion()
         if not self.result:
             if self.wait_for_output:
                 LOGGER.warning("Expected output, but did not receive results.")
@@ -461,7 +485,9 @@ class GetFile(BaseSessionCommand):
                 content_handle.close()
             if os.path.exists(self.output_filename):
                 LOGGER.info(f"wrote: {self.output_filename}")
-                return True
+            if self.post_completion_command:
+                self.execute_post_completion()
+            return True
         except Exception as e:
             LOGGER.error(f"problem getting file content: {e}")
             return False
