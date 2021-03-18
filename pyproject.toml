@@ -5,7 +5,7 @@ description = "command line tool for interfacing with multiple carbonblack envir
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://github.com/seanmcfeely/cbinterface2"
+homepage = "https://github.com/ace-ecosystem/cbinterface2"
 keywords = ["Carbon Black", "carbonblack"]
 include = ["README.md"]
 
@@ -14,6 +14,7 @@ python = "^3.6"
 cbapi = "^1.7.3"
 coloredlogs = "^15.0"
 argcomplete = "^1.12.2"
+carbon-black-cloud-sdk = "^1.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

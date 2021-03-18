@@ -13,9 +13,12 @@ import json
 import signal
 import yaml
 
+# TODO XXX Migrate to PSC cloud SDK
+
 import cbapi.auth
-from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.response import CbResponseAPI
+from cbc_sdk.rest_api import CBCloudAPI
+#from cbapi.psc.threathunter import CbThreatHunterAPI
+#from cbapi.response import CbResponseAPI
 from cbapi.errors import ConnectionError, UnauthorizedError, ServerError
 
 from cbinterface.helpers import is_uuid, clean_exit, input_with_timeout
@@ -29,8 +32,9 @@ from cbinterface.config import (
     get_playbook_map
 )
 
-from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
-from cbinterface.psc.cli import add_psc_arguments_to_parser, execute_threathunter_arguments
+# handle if cbapi not installed
+from cbinterface.response.cli import add_response_arguments_to_parser, connect_and_execute_response_arguments
+from cbinterface.psc2.cli import add_psc_arguments_to_parser, execute_threathunter_arguments
 from cbinterface.scripted_live_response import write_playbook_template, write_remediation_template
 
 LOGGER = logging.getLogger("cbinterface.cli")
@@ -175,6 +179,13 @@ def main():
         dest="inspect_children",
         action="store_true",
         help="only print process children event details",
+    )
+    parser_inspect.add_argument(
+        "-s",
+        "--show-siblings",
+        dest="inspect_siblings",
+        action="store_true",
+        help="print sibling processes to this process (share parent)",
     )
     parser_inspect.add_argument(
         "-nc", "--netconns", dest="inspect_netconns", action="store_true", help="print network connections"
@@ -389,11 +400,11 @@ def main():
     product, profile = args.environment.split(":", 1)
     try:
         if product == "response":
-            cb = CbResponseAPI(profile=profile)
-            execute_response_arguments(cb, args)
-
+            #cb = CbResponseAPI(profile=profile)
+            #execute_response_arguments(profile, args)
+            connect_and_execute_response_arguments(profile, args)
         elif product == "psc":
-            cb = CbThreatHunterAPI(profile=profile)
+            cb = CBCloudAPI(profile=profile)
             execute_threathunter_arguments(cb, args)
     except ConnectionError as e:
         LOGGER.critical(f"Couldn't connect to {product} {profile}: {e}")
