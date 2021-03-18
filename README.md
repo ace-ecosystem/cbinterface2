@@ -22,7 +22,7 @@ pip install cbinterface
 ## Direct from Github
 
 ```
-pip install git+https://github.com/seanmcfeely/cbinterface2
+pip install git+https://github.com/ace-ecosystem/cbinterface2
 ```
 
 # Setup & Configure
