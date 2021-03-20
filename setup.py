@@ -26,7 +26,7 @@ setup(
     description="Command line tool for interfacing with carbonblack environments (PSC & Response) for analysis/investigations and live response playbooks.",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url="https://github.com/seanmcfeely/cbinterface2",
+    url="https://github.com/ace-ecosystem/cbinterface2",
     author='Sean McFeely',
     author_email='mcfeelynaes@gmail.com',
     license='Apache-2.0',
