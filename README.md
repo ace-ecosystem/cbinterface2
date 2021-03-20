@@ -830,19 +830,17 @@ optional arguments:
   --write-template      write a playbook template file to use as example.
   ```
   
-  I've includes some playbooks by default.
+I've includes some playbooks by default.
   
-  ```
-  dev-cbinterface.py lr theHost playbook --list-playbooks 
+```
+$ cbinterface lr theh playbook --list-playbooks 
 
 Configured Playbooks:
-	collect_browsing_history : Collect Chrome and Edge browsing history.
-	get_user_account_data_NOT_READY : What user accounts are on this windows host?
 	delete_directory : Delete a directory structure.
-	collect_scheduled_tasks : Get all scheduled tasks on a windows device
 	Delete Scheduled Task : Delete a scheduled task by name on a windows os.
+	collect_scheduled_tasks : Get all scheduled tasks on a windows device
 	delete_service : Delete a service from the registry.
-
+	collect_browsing_history : Collect Chrome and Edge browsing history.
 ```
 
 Create your own and use the `-f` to execute them.
