@@ -833,7 +833,7 @@ optional arguments:
 I've includes some playbooks by default.
   
 ```
-$ cbinterface lr theh playbook --list-playbooks 
+$ cbinterface lr theHostnameOrDeviceID playbook --list-playbooks 
 
 Configured Playbooks:
 	delete_directory : Delete a directory structure.
