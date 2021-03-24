@@ -82,7 +82,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
     # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/cb-threathunter/latest/process-search-v2/#start-a-process-facet-job
     # Also, NOTE that this table lists fields that support faceting via the built in method, children is not one of them:
     # https://developer.carbonblack.com/reference/cb-threathunter/latest/process-search-fields/
-    from cbinterface.helpers import create_histogram_string, get_os_independant_filepath
+    from cbinterface.helpers import create_histogram_string, get_os_independent_filepath
 
     fields = [
         "parent_name",
@@ -105,7 +105,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                     LOGGER.info(f"condensing {value} to {value[0]}")
                 value = value[0]
             elif field_name in path_fields:
-                file_path = get_os_independant_filepath(value)
+                file_path = get_os_independent_filepath(value)
                 file_name = file_path.name
                 value = file_name
             if value not in facet_dict[field_name]:
@@ -122,7 +122,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                 continue
             children = proc.summary.children or []
             for cp in children:
-                process_path = get_os_independant_filepath(cp.get("process_name"))
+                process_path = get_os_independent_filepath(cp.get("process_name"))
                 process_name = process_path.name
                 if process_name not in facet_dict["childproc_name"]:
                     facet_dict["childproc_name"][process_name] = 1
@@ -146,7 +146,7 @@ def print_facet_histogram_v2(
 
     # NOTE: no support for childproc facets with this built-in
 
-    from cbinterface.helpers import get_os_independant_filepath
+    from cbinterface.helpers import get_os_independent_filepath
 
     post_data = {}
     post_data["query"] = query
@@ -187,7 +187,7 @@ def print_facet_histogram_v2(
         for entry in facets["values"]:
             entry_name = entry["name"]
             if field_name in path_fields and len(entry_name) > 55:
-                file_path = get_os_independant_filepath(entry_name)
+                file_path = get_os_independent_filepath(entry_name)
                 file_name = file_path.name
                 file_path = entry_name[: len(entry_name) - len(file_name)]
                 file_path = file_path[: 40 - len(file_name)]

@@ -464,10 +464,10 @@ class GetFile(BaseSessionCommand):
 
     def process_result(self):
         """Write the results to a local file."""
-        from cbinterface.helpers import get_os_independant_filepath
+        from cbinterface.helpers import get_os_independent_filepath
 
         if self.output_filename is None:
-            filepath = get_os_independant_filepath(self._file_path)
+            filepath = get_os_independent_filepath(self._file_path)
             hostname_part = f"{self.hostname}_" if self.hostname else ""
             self.output_filename = f"{self.sensor_id}_{hostname_part}{filepath.name}"
         else:
@@ -584,10 +584,10 @@ class KillProcessByName(BaseSessionCommand):
         self.nested_commands = {}
 
     def run(self, session: CbLRSessionBase):
-        from cbinterface.helpers import get_os_independant_filepath
+        from cbinterface.helpers import get_os_independent_filepath
 
         for process in session.list_processes():
-            filepath = get_os_independant_filepath(process["path"])
+            filepath = get_os_independent_filepath(process["path"])
             if self.pname in filepath.name:
                 LOGGER.info(f"found process to kill: {process['path']} - pid={process['pid']}")
                 self.nested_commands[process["pid"]] = session.kill_process(process["pid"])
@@ -620,12 +620,12 @@ class RecursiveKillProcessByName(BaseSessionCommand):
         self.local_session_manager = None
 
     def run(self, session: CbLRSessionBase):
-        from cbinterface.helpers import get_os_independant_filepath
+        from cbinterface.helpers import get_os_independent_filepath
         from cbinterface.response.sessions import CustomLiveResponseSessionManager
 
         self.local_session_manager = CustomLiveResponseSessionManager(session._cb)
         for process in session.list_processes():
-            filepath = get_os_independant_filepath(process["path"])
+            filepath = get_os_independent_filepath(process["path"])
             if self.pname in filepath.name:
                 LOGGER.info(f"found process to kill: {process['path']} - pid={process['pid']}")
                 cmd = KillProcessByID(process["pid"])

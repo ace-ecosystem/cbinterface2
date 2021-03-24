@@ -16,7 +16,7 @@ from cbapi.psc import Device
 from cbapi.psc.devices_query import DeviceSearchQuery
 from cbapi.live_response_api import CbLRManagerBase
 
-from cbinterface.helpers import get_os_independant_filepath, input_with_timeout
+from cbinterface.helpers import get_os_independent_filepath, input_with_timeout
 
 # XXX Make playbooks support all commands?
 
@@ -233,7 +233,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                     LOGGER.error(f"Not found: '{original_fp}' OR '{file_path}'")
                     return False
 
-            file_name = get_os_independant_filepath(file_path).name
+            file_name = get_os_independent_filepath(file_path).name
 
             cmd = PutFile(file_path, sensor_write_filepath=client_file_path, placeholders=placeholders, post_completion_command=post_completion_command)
             cmd.description = f"Put '{file_name}' on device @ '{client_file_path}'"

@@ -263,12 +263,12 @@ def get_command_result(cb: CbResponseAPI, session_id: str, command_id: str):
 
 def get_file_content(cb: CbResponseAPI, session_id: str, file_id: str):
     """Get file content stored in LR session and write the file locally."""
-    from cbinterface.helpers import get_os_independant_filepath
+    from cbinterface.helpers import get_os_independent_filepath
 
     try:
         file_metadata = cb.get_object(f"{CBLR_BASE}/session/{session_id}/file/{file_id}")
         if file_metadata:
-            filepath = get_os_independant_filepath(file_metadata["file_name"])
+            filepath = get_os_independent_filepath(file_metadata["file_name"])
             filename = f"{session_id}_{filepath.name}"
         result = cb.session.get(f"{CBLR_BASE}/session/{session_id}/file/{file_id}/content", stream=True)
         if result.status_code != 200:
