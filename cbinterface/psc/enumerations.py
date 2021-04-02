@@ -13,11 +13,13 @@ from cbinterface.helpers import as_configured_timezone
 
 LOGGER = logging.getLogger("cbinterface.psc.enumerations")
 
+
 def search_for_usb_devices(cb: CbPSCBaseAPI, query):
     # XXX - This doesn't look implemented in TH?
     uri = f"/device_control/v3/orgs/{cb.credentials.org_key}/devices/_search"
-    data = {'query': query}
+    data = {"query": query}
     return cb.post_object(uri, data).json()
+
 
 def logon_history(cb: CbPSCBaseAPI, hostname_or_username_query) -> None:
     """Given hostname or username, enumerate logon history.
@@ -29,10 +31,13 @@ def logon_history(cb: CbPSCBaseAPI, hostname_or_username_query) -> None:
     """
     from cbinterface.psc.query import make_process_query
 
-    if not (hostname_or_username_query.startswith("device_name:") or hostname_or_username_query.startswith("process_username:")):
+    if not (
+        hostname_or_username_query.startswith("device_name:")
+        or hostname_or_username_query.startswith("process_username:")
+    ):
         LOGGER.info(f"use 'device_name:' or 'process_username:' field to narrow enumeration search.")
 
-    #query = f"process_name:userinit.exe parent_name:winlogon.exe {hostname_or_username_query}"
+    # query = f"process_name:userinit.exe parent_name:winlogon.exe {hostname_or_username_query}"
     # XXX will catch more than "log on"
     query = f"process_name:explorer.exe {hostname_or_username_query}"
 

@@ -58,6 +58,7 @@ def clean_exit(signal, frame):
     LOGGER.info(f"caught KeyboardInterrupt. exiting.")
     sys.exit(0)
 
+
 def get_os_independent_filepath(unknown_os_file_path: str) -> Union[PureWindowsPath, PurePosixPath]:
     """Return a proper os filepath object."""
     filepath = PureWindowsPath(unknown_os_file_path)

@@ -89,15 +89,20 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
     parser_watchlist = subparsers.add_parser(
         "response_watchlist", aliases=["rwl"], help="Work with response watchlists."
     )
-    parser_watchlist.add_argument("-l", "--list-watchlists", action='store_true', help="Print all watchlists.")
-    parser_watchlist.add_argument("-q", "--query-watchlists", action='store', help="filter watchlists by watchlist query")
+    parser_watchlist.add_argument("-l", "--list-watchlists", action="store_true", help="Print all watchlists.")
+    parser_watchlist.add_argument(
+        "-q", "--query-watchlists", action="store", help="filter watchlists by watchlist query"
+    )
     parser_watchlist.add_argument(
         "-json",
         "--watchlists-to-json",
         action="store_true",
         help="Convert watchlists to json and print to stdout.",
     )
-    parser_watchlist.add_argument("--watchlist-names-from-stdin", action='store_true', help="read a list of watchlist names from stdin to load.")
+    parser_watchlist.add_argument(
+        "--watchlist-names-from-stdin", action="store_true", help="read a list of watchlist names from stdin to load."
+    )
+
 
 def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> bool:
     """The logic to execute response specific command line arguments.
@@ -146,7 +151,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
             watchlists = query_watchlists(cb, args.query_watchlists)
         elif args.list_watchlists:
             watchlists = get_all_watchlists(cb)
-        
+
         if args.watchlist_names_from_stdin:
             watchlist_names = [line.strip() for line in sys.stdin]
 
@@ -415,7 +420,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
             if args.playbook_name:
                 playbook_data = get_playbook_map()[args.playbook_name]
-                playbook_path = playbook_data['path']
+                playbook_path = playbook_data["path"]
                 playbook_commands = build_playbook_commands(playbook_path)
                 commands.extend(playbook_commands)
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")

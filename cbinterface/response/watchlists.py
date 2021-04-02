@@ -14,9 +14,11 @@ from cbapi.response import CbResponseAPI, Watchlist
 
 LOGGER = logging.getLogger("cbinterface.response.watchlists")
 
+
 def get_all_watchlists(cb: CbResponseAPI) -> SimpleQuery:
     """Return a list of all watchlists."""
     return cb.select(Watchlist)
+
 
 def query_watchlists(cb: CbResponseAPI, query: str) -> SimpleQuery:
     """perform watchlist query"""
@@ -26,11 +28,13 @@ def query_watchlists(cb: CbResponseAPI, query: str) -> SimpleQuery:
         LOGGER.error(f"problem querying watchlists: {e}")
         return []
 
+
 def watchlist_to_dict(watchlist: Watchlist) -> Dict:
-   """Return watchlist dictionary."""
-   wl = watchlist._info
-   wl['query'] = watchlist.query
-   return wl
+    """Return watchlist dictionary."""
+    wl = watchlist._info
+    wl["query"] = watchlist.query
+    return wl
+
 
 def these_watchlists_to_list_dict(cb: CbResponseAPI, watchlist_names=[], watchlist_ids=[]) -> List[Dict]:
     """Convert the listed watchlists to a list of their dictionary representations."""

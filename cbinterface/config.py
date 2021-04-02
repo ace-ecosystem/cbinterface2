@@ -106,10 +106,10 @@ def get_playbook_map():
     """
     playbook_map = {}
     # package included playbooks
-    playbook_paths =  glob.glob(f"{HOME_PATH}/playbook_configs/*.ini")
+    playbook_paths = glob.glob(f"{HOME_PATH}/playbook_configs/*.ini")
     # configured playbooks
-    if CONFIG.has_section('playbooks'):
-        playbook_paths.extend(list(CONFIG['playbooks'].values()))
+    if CONFIG.has_section("playbooks"):
+        playbook_paths.extend(list(CONFIG["playbooks"].values()))
 
     for playbook_path in glob.glob(f"{HOME_PATH}/playbook_configs/*.ini"):
         playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
@@ -122,10 +122,12 @@ def get_playbook_map():
         if playbook_name in playbook_map:
             LOGGER.error(f"playbook name collision on '{playbook_name}'. skipping this one...")
             continue
-        playbook_name = playbook.get('overview', 'name', fallback=playbook_name)
-        playbook_description = playbook.get('overview', 'description', fallback="")
-        playbook_map[playbook_name] = {'path': playbook_path,
-                                       'name': playbook_name,
-                                       'description': playbook_description}
+        playbook_name = playbook.get("overview", "name", fallback=playbook_name)
+        playbook_description = playbook.get("overview", "description", fallback="")
+        playbook_map[playbook_name] = {
+            "path": playbook_path,
+            "name": playbook_name,
+            "description": playbook_description,
+        }
 
     return playbook_map

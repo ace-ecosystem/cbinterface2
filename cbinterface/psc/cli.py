@@ -20,7 +20,19 @@ from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
-from cbinterface.psc.intel import convert_response_watchlists_to_psc_edr_watchlists, get_all_watchlists, get_watchlist, get_report, get_report_with_IOC_status, print_report, interactively_update_report_ioc_query, convert_response_watchlists_to_single_psc_edr_watchlist, get_all_feeds, get_feed, get_feed_report
+from cbinterface.psc.intel import (
+    convert_response_watchlists_to_psc_edr_watchlists,
+    get_all_watchlists,
+    get_watchlist,
+    get_report,
+    get_report_with_IOC_status,
+    print_report,
+    interactively_update_report_ioc_query,
+    convert_response_watchlists_to_single_psc_edr_watchlist,
+    get_all_feeds,
+    get_feed,
+    get_feed_report,
+)
 from cbinterface.psc.device import (
     make_device_query,
     device_info,
@@ -146,25 +158,49 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         default=False,
         help="UN-Quarantine the devices returned by the query.",
     )
-    
+
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
-    parser_intel.add_argument('-lw', '--list-watchlists', action='store_true', help="List all watchlists.")
-    parser_intel.add_argument('-w', '--get-watchlist', action='store', help="Get watchlist by ID.")
-    parser_intel.add_argument('-wr', '--get-watchlist-report', action='store', help="Get a watchlist report by report ID.")
-    parser_intel.add_argument('--update-ioc-query', action='store', help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id")
-    parser_intel.add_argument('--json', action='store_true', help="Return results as JSON.")
-    parser_intel.add_argument('-lf', '--list-feeds', action='store_true', help="List all Feeds, public included.")
-    parser_intel.add_argument('-f', '--get-feed', action='store', help="Get Feed by ID. WARNING: Can return a lot of data")
-    parser_intel.add_argument('-fr', '--get-feed-report', action='store', help="Get specific Report from specific Feed. format: feed_id/report_id")
+    parser_intel.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
+    parser_intel.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
+    parser_intel.add_argument(
+        "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
+    )
+    parser_intel.add_argument(
+        "--update-ioc-query",
+        action="store",
+        help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id",
+    )
+    parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
+    parser_intel.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
+    parser_intel.add_argument(
+        "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data"
+    )
+    parser_intel.add_argument(
+        "-fr",
+        "--get-feed-report",
+        action="store",
+        help="Get specific Report from specific Feed. format: feed_id/report_id",
+    )
 
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
     parser_intel_migration = intel_subparsers.add_parser(
         "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
     )
-    parser_intel_migration.add_argument('response_watchlist_json_data_path', help="Path to response watchlist json file. (see cbinterface response_watchlist")
-    parser_intel_migration.add_argument('--one-for-one', action='store_true', help="Create a PSC Watchlist for every CbR watchlist that passes validation.")
-    parser_intel_migration.add_argument('--many-to-one', action='store_true', help="Create a single PSC Watchlist containing all CbR watchlist queries that pass validation.")
+    parser_intel_migration.add_argument(
+        "response_watchlist_json_data_path",
+        help="Path to response watchlist json file. (see cbinterface response_watchlist",
+    )
+    parser_intel_migration.add_argument(
+        "--one-for-one",
+        action="store_true",
+        help="Create a PSC Watchlist for every CbR watchlist that passes validation.",
+    )
+    parser_intel_migration.add_argument(
+        "--many-to-one",
+        action="store_true",
+        help="Create a single PSC Watchlist containing all CbR watchlist queries that pass validation.",
+    )
 
 
 def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace) -> bool:
@@ -184,12 +220,14 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     if args.command == "intel":
         if args.intel_command == "migrate":
             response_watchlists = None
-            with open(args.response_watchlist_json_data_path, 'r') as fp:
+            with open(args.response_watchlist_json_data_path, "r") as fp:
                 response_watchlists = json.load(fp)
 
             if args.one_for_one:
                 results = convert_response_watchlists_to_psc_edr_watchlists(cb, response_watchlists)
-                LOGGER.info(f"created {len(results)} PSC watchlists from {len(response_watchlists)} Response watchlists.")
+                LOGGER.info(
+                    f"created {len(results)} PSC watchlists from {len(response_watchlists)} Response watchlists."
+                )
                 print("Created watchlists:")
                 for wl in results:
                     print(f" + ID={wl['id']} - Title={wl['name']}")
@@ -217,10 +255,10 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 print(json.dumps(get_report_with_IOC_status(cb, args.get_watchlist_report), indent=2))
             else:
                 report = get_report_with_IOC_status(cb, args.get_watchlist_report)
-                print_report(report) # specifically helpful with query based IOCs
+                print_report(report)  # specifically helpful with query based IOCs
 
         if args.update_ioc_query:
-            report_id, ioc_id = args.update_ioc_query.split('/', 1)
+            report_id, ioc_id = args.update_ioc_query.split("/", 1)
             updated_report = interactively_update_report_ioc_query(cb, report_id, ioc_id)
             if updated_report:
                 LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
@@ -244,7 +282,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 print(Feed(cb, initial_data=feed))
 
         if args.get_feed_report:
-            feed_id, report_id = args.get_feed_report.split('/', 1)
+            feed_id, report_id = args.get_feed_report.split("/", 1)
             report = get_feed_report(cb, feed_id, report_id)
             print(json.dumps(report, indent=2))
 
@@ -312,8 +350,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_facet_histogram(processes)
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
-            #from cbinterface.psc.query import print_facet_histogram_v2
-            #print_facet_histogram_v2(cb, args.query)
+            # from cbinterface.psc.query import print_facet_histogram_v2
+            # print_facet_histogram_v2(cb, args.query)
 
         # don't display large results by default
         print_results = True
@@ -540,7 +578,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
             if args.playbook_name:
                 playbook_data = get_playbook_map()[args.playbook_name]
-                playbook_path = playbook_data['path']
+                playbook_path = playbook_data["path"]
                 playbook_commands = build_playbook_commands(playbook_path)
                 commands.extend(playbook_commands)
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")

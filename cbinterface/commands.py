@@ -15,6 +15,7 @@ LOGGER = logging.getLogger("cbinterface.command")
 # the cbinterface directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
 class BaseSessionCommand:
     """For storing and managing session commands.
 
@@ -31,7 +32,7 @@ class BaseSessionCommand:
         self._exception = None
         self._result = None
         self._hostname = None
-        self.placeholders = placeholders 
+        self.placeholders = placeholders
         self.post_completion_command = post_completion_command
 
     def fill_placeholders(self, string_item: str, placeholders={}):
@@ -40,7 +41,7 @@ class BaseSessionCommand:
         placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
-        placeholders['WORK_DIR'] = placeholders.get("WORK_DIR", "C:\\Windows\\System32")
+        placeholders["WORK_DIR"] = placeholders.get("WORK_DIR", "C:\\Windows\\System32")
         string_item = string_item.format(**placeholders)
         return string_item
 
@@ -107,13 +108,14 @@ class BaseSessionCommand:
     def execute_post_completion(self):
         if not self.post_completion_command:
             return None
-        if self.status != 'complete':
+        if self.status != "complete":
             return False
         self.post_completion_command = self.fill_placeholders(self.post_completion_command)
         if self.post_completion_command.startswith("tools/"):
             self.post_completion_command = f"{BASE_DIR}/{self.post_completion_command}"
         LOGGER.info(f"executing post completion command: {self.post_completion_command}")
         import shlex, subprocess
+
         try:
             args = shlex.split(self.post_completion_command)
             return subprocess.run(args=args)
@@ -231,7 +233,7 @@ class ExecuteCommand(BaseSessionCommand):
         wait_for_completion=True,
         print_results=True,
         write_results_path=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(description=f"Execute {command}", **kwargs)
         self._command_string = command
@@ -392,9 +394,10 @@ class RegKeyValue(BaseSessionCommand):
 
 class GetSystemMemoryDump(BaseSessionCommand):
     """Perform a memory dump operation on the sensor.
-    
+
     NOTE: Not a fan of Cb's implementation.
     """
+
     def __init__(self, local_filename: str = "", compress=True):
         super().__init__(description=f"Dump System Memory")
         self.local_filename = local_filename
@@ -477,7 +480,7 @@ class GetFile(BaseSessionCommand):
             if os.path.exists(self.output_filename):
                 LOGGER.debug(f"{self.output_filename} already exists. appending epoch time")
                 _now = str(time.time())
-                _now = _now[:_now.rfind(".")]
+                _now = _now[: _now.rfind(".")]
                 self.output_filename = f"{_now}_{self.output_filename}"
             with open(self.output_filename, "wb") as fp:
                 content_handle = self.result

@@ -9,7 +9,7 @@ from typing import Union
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
-#from cbapi.psc.rest_api import CbPSCBaseAPI
+# from cbapi.psc.rest_api import CbPSCBaseAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.psc.threathunter.models import AsyncProcessQuery
 
@@ -43,6 +43,7 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
         return False
     return True
 
+
 def is_valid_process_query_string(cb: CbThreatHunterAPI, query: str) -> bool:
     """
     Validates a process query string is valid for PSC.
@@ -59,6 +60,7 @@ def is_valid_process_query_string(cb: CbThreatHunterAPI, query: str) -> bool:
     if not validated.get("valid"):
         return False
     return True
+
 
 def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
     """
@@ -77,6 +79,7 @@ def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
         return False
     resp = resp.json()
     return resp.get("query")
+
 
 def make_process_query(
     cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
