@@ -31,17 +31,23 @@ def is_psc_guid(guid: str):
     return PSC_GUID_REGEX.match(guid)
 
 
-def input_with_timeout(prompt, default=None, timeout=30):
+def input_with_timeout(prompt, default=None, timeout=30, stderr=True):
     """Wait up to timeout for user input"""
 
     def _log_and_exit(signum, frame):
-        sys.stderr.write("\n")
+        if stderr:
+            sys.stderr.write("\n")
+        else:
+            sys.stdout.write("\n")
         LOGGER.error("Timeout reached waiting for input.")
         sys.exit()
 
     signal.signal(signal.SIGALRM, _log_and_exit)
     signal.alarm(timeout)
-    sys.stderr.write(prompt)
+    if stderr:
+        sys.stderr.write(prompt)
+    else:
+        sys.stdout.write(prompt)
     answer = input() or default
     signal.alarm(0)
     return answer

@@ -1,3 +1,4 @@
+import sys
 import re
 import argparse
 import datetime
@@ -11,6 +12,7 @@ from cbapi.errors import ObjectNotFoundError
 from cbinterface.helpers import is_uuid, clean_exit, input_with_timeout
 from cbinterface.response.query import make_process_query, print_facet_histogram
 from cbinterface.response.sensor import is_sensor_online, find_sensor_by_hostname, make_sensor_query, sensor_info
+from cbinterface.response.watchlists import get_all_watchlists, query_watchlists, these_watchlists_to_list_dict
 from cbinterface.response.process import (
     process_to_dict,
     inspect_process_tree,
@@ -83,6 +85,19 @@ def add_response_arguments_to_parser(subparsers: argparse.ArgumentParser) -> Non
         help="Print all available process info (all fields).",
     )
 
+    # response watchlist parser
+    parser_watchlist = subparsers.add_parser(
+        "response_watchlist", aliases=["rwl"], help="Work with response watchlists."
+    )
+    parser_watchlist.add_argument("-l", "--list-watchlists", action='store_true', help="Print all watchlists.")
+    parser_watchlist.add_argument("-q", "--query-watchlists", action='store', help="filter watchlists by watchlist query")
+    parser_watchlist.add_argument(
+        "-json",
+        "--watchlists-to-json",
+        action="store_true",
+        help="Convert watchlists to json and print to stdout.",
+    )
+    parser_watchlist.add_argument("--watchlist-names-from-stdin", action='store_true', help="read a list of watchlist names from stdin to load.")
 
 def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> bool:
     """The logic to execute response specific command line arguments.
@@ -123,6 +138,28 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                     print(sensor_info(sensor))
             print()
         return True
+
+    # Watchlists #
+    if args.command and (args.command == "response_watchlist" or args.command == "rwl"):
+        watchlists = watchlist_names = []
+        if args.query_watchlists:
+            watchlists = query_watchlists(cb, args.query_watchlists)
+        elif args.list_watchlists:
+            watchlists = get_all_watchlists(cb)
+        
+        if args.watchlist_names_from_stdin:
+            watchlist_names = [line.strip() for line in sys.stdin]
+
+        if args.watchlists_to_json:
+            if watchlists:
+                print(json.dumps(these_watchlists_to_list_dict(cb, [wl.name for wl in watchlists])))
+            if watchlist_names:
+                print(json.dumps(these_watchlists_to_list_dict(cb, watchlist_names)))
+            return
+        elif len(watchlists) > 0:
+            print("\n------------------------- WATCHLISTS -------------------------")
+            for wl in watchlists:
+                print(wl)
 
     # Process Quering #
     if args.command and (args.command.startswith("q") or args.command == "pq"):
