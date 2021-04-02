@@ -15,12 +15,12 @@ from cbapi import __file__ as cbapi_file_path
 from cbapi.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
 from cbapi.psc import Device
 from cbapi.psc.devices_query import DeviceSearchQuery
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report
+from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
 from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
-from cbinterface.psc.intel import convert_response_watchlists_to_psc_edr_watchlists, get_all_watchlists, get_watchlist, get_report, get_report_with_IOC_status, print_report, interactively_update_report_ioc_query, convert_response_watchlists_to_single_psc_edr_watchlist
+from cbinterface.psc.intel import convert_response_watchlists_to_psc_edr_watchlists, get_all_watchlists, get_watchlist, get_report, get_report_with_IOC_status, print_report, interactively_update_report_ioc_query, convert_response_watchlists_to_single_psc_edr_watchlist, get_all_feeds, get_feed, get_feed_report
 from cbinterface.psc.device import (
     make_device_query,
     device_info,
@@ -154,6 +154,10 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel.add_argument('-wr', '--get-watchlist-report', action='store', help="Get a watchlist report by report ID.")
     parser_intel.add_argument('--update-ioc-query', action='store', help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id")
     parser_intel.add_argument('--json', action='store_true', help="Return results as JSON.")
+    parser_intel.add_argument('-lf', '--list-feeds', action='store_true', help="List all Feeds, public included.")
+    parser_intel.add_argument('-f', '--get-feed', action='store', help="Get Feed by ID. WARNING: Can return a lot of data")
+    parser_intel.add_argument('-fr', '--get-feed-report', action='store', help="Get specific Report from specific Feed. format: feed_id/report_id")
+
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
     parser_intel_migration = intel_subparsers.add_parser(
         "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
@@ -197,9 +201,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.list_watchlists:
             watchlists = get_all_watchlists(cb)
-            for wl in watchlists:
-                print(Watchlist(cb, initial_data=wl))
-                print()
+            if args.json:
+                print(json.dumps(watchlists, indent=2))
+            else:
+                for wl in watchlists:
+                    print(Watchlist(cb, initial_data=wl))
+                    print()
 
         if args.get_watchlist:
             watchlist = get_watchlist(cb, args.get_watchlist)
@@ -217,6 +224,29 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             updated_report = interactively_update_report_ioc_query(cb, report_id, ioc_id)
             if updated_report:
                 LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
+
+        if args.list_feeds:
+            feeds = get_all_feeds(cb)
+            if args.json:
+                print(json.dumps(get_all_feeds(cb), indent=2))
+            else:
+                for f in feeds:
+                    print(Feed(cb, initial_data=f))
+                    print()
+
+        if args.get_feed:
+            feed = get_feed(cb, args.get_feed)
+            if not feed:
+                return None
+            if args.json:
+                print(json.dumps(feed, indent=2))
+            else:
+                print(Feed(cb, initial_data=feed))
+
+        if args.get_feed_report:
+            feed_id, report_id = args.get_feed_report.split('/', 1)
+            report = get_feed_report(cb, feed_id, report_id)
+            print(json.dumps(report, indent=2))
 
         return True
 

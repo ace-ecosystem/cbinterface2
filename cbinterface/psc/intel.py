@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict,List
 
 from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.errors import ServerError, ClientError
+from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.intel")
 
@@ -246,11 +246,42 @@ def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report
 
     return watchlist_data
 
-# TODO enable watchlist alerting/taging
+# TODO enable watchlist alerting/taging?
 
-# TODO disable watchlist alerting/taging
+# TODO disable watchlist alerting/taging?
 
-# Response to PSC EDR Watchlist Migrations #
+## Feeds ##
+def get_all_feeds(cb: CbThreatHunterAPI, include_public=True) -> Dict:
+    """Retrieve all feeds owned by the caller.
+
+    Provide include_public=true parameter to also include public community feeds.
+    """
+    url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds"
+    params = {"include_public": include_public}
+    result = cb.get_object(url, query_parameters=params)
+    return result.get("results", [])
+
+def get_feed(cb: CbThreatHunterAPI, feed_id: str) -> Dict:
+    """Get a specific feed by ID."""
+    url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds"
+    try:
+        return cb.get_object(f"{url}/{feed_id}")
+    except ServerError:
+        LOGGER.error(f"Caught ServerError getting feed {feed_id}: {e}")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"No feed by feed id {feed_id}")
+
+def get_feed_report(cb: CbThreatHunterAPI, feed_id: str, report_id: str) -> Dict:
+    """Get a specific report from a specific feed."""
+    url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds/{feed_id}/reports/{report_id}"
+    try:
+        return cb.get_object(url)
+    except ServerError:
+        LOGGER.error(f"Caught ServerError getting feed report {feed_id}: {e}")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"No feed {feed_id} or report {report_id} in the feed")
+
+## Response to PSC EDR Watchlist Migrations ##
 def yield_reports_created_from_response_watchlists(cb: CbThreatHunterAPI, response_watchlists: List[Dict]) -> List[Dict]:
     """Convert a list of response watchlists to PSC EDR intel reports.
 
