@@ -406,6 +406,7 @@ def main():
 
     # Connect and execute
     product, profile = args.environment.split(":", 1)
+    LOGGER.debug(f"using '{profile}' profile via the configured '{product}' product.")
     try:
         if product == "response":
             cb = CbResponseAPI(profile=profile)

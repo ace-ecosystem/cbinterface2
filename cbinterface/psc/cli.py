@@ -25,6 +25,7 @@ from cbinterface.psc.intel import (
     get_all_watchlists,
     get_watchlist,
     get_report,
+    delete_report,
     get_report_with_IOC_status,
     print_report,
     interactively_update_report_ioc_query,
@@ -32,6 +33,10 @@ from cbinterface.psc.intel import (
     get_all_feeds,
     get_feed,
     get_feed_report,
+    alert_search,
+    get_alert,
+    update_alert_state,
+    interactively_update_alert_state,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -161,29 +166,55 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
 
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
-    parser_intel.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
-    parser_intel.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
-    parser_intel.add_argument(
+    parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
+
+    intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
+
+    # intel watchlists
+    parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
+    parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
+    parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
+    parser_intel_watchlists.add_argument(
         "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
     )
-    parser_intel.add_argument(
+    parser_intel_watchlists.add_argument('-dr', '--delete-watchlist-report', action='store', help="Delete watchlist report by ID.")
+    parser_intel_watchlists.add_argument(
         "--update-ioc-query",
         action="store",
         help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id",
     )
-    parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
-    parser_intel.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
-    parser_intel.add_argument(
+
+    # intel feeds
+    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
+    parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
+    parser_intel_feeds.add_argument(
         "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data"
     )
-    parser_intel.add_argument(
+    parser_intel_feeds.add_argument(
         "-fr",
         "--get-feed-report",
         action="store",
         help="Get specific Report from specific Feed. format: feed_id/report_id",
     )
 
-    intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
+    # alert parser plopped in here under intel
+    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
+    parser_intel_alerts.add_argument('-g', '--get-alert', action='store', help="Get a specific Alert by ID.")
+    parser_intel_alerts.add_argument('-d', '--dismiss-alert', action='store', help="Dismiss an Alert by ID.")
+    parser_intel_alerts.add_argument('-o', '--open-alert', action='store', help="Open an Alert by ID.")
+    parser_intel_alerts.add_argument('-u', '--interactively-update-alert', action='store', help="Update Alert by ID.")
+    parser_intel_alerts.add_argument('-r', '--remediation-state', action='store', help="An Alert remediation state to use with any state change actions.")
+    parser_intel_alerts.add_argument('-c', '--comment', action='store', help="An Alert comment to use with any state change actions.")
+
+    intel_alerts_subparsers = parser_intel_alerts.add_subparsers(dest="intel_alerts_command")
+    # alert search parser
+    parser_intel_alerts_search = intel_alerts_subparsers.add_parser("search", help="Search Alerts with lucene syntax queries and/or value searches.")
+    parser_intel_alerts_search.add_argument('alert_query', action='store', help="The Alert search query.")
+    # TODO Add other arguments to allow for searching via start & end times, specifying rows, start, alert state
+    parser_intel_alerts_search.add_argument('-cr', '--create_time-range', action='store', help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]")
+    parser_intel_alerts_search.add_argument('-as', '--alert-states', action='append', choices=["DISMISSED", "OPEN"], help="Only return Alerts in these states.")
+
+    # cb response to psc migration parser
     parser_intel_migration = intel_subparsers.add_parser(
         "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
     )
@@ -218,6 +249,35 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
     # Intel #
     if args.command == "intel":
+        if args.intel_command == "alerts":
+            if args.get_alert:
+                alert = get_alert(cb, args.get_alert)
+                if alert:
+                    print(json.dumps(alert, indent=2))
+
+            if args.open_alert:
+                result = update_alert_state(cb, args.open_alert, state="OPEN", remediation_state=args.remediation_state, comment=args.comment)
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.dismiss_alert:
+                result = update_alert_state(cb, args.dismiss_alert, state="DISMISSED", remediation_state=args.remediation_state, comment=args.comment)
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.interactively_update_alert:
+                result = interactively_update_alert_state(cb, args.interactively_update_alert)
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.intel_alerts_command == "search":
+                criteria = {}
+                if args.create_time_range:
+                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
+                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
+                if results:
+                    print(json.dumps(results, indent=2))
+
         if args.intel_command == "migrate":
             response_watchlists = None
             with open(args.response_watchlist_json_data_path, "r") as fp:
@@ -231,60 +291,73 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 print("Created watchlists:")
                 for wl in results:
                     print(f" + ID={wl['id']} - Title={wl['name']}")
+
             if args.many_to_one:
                 watchlist = convert_response_watchlists_to_single_psc_edr_watchlist(cb, response_watchlists)
                 if not watchlist:
                     return False
-                LOGGER.info(f"created {watchlist}")
+                LOGGER.info(f"Created \"{watchlist['name']}\" containing {len(watchlist['report_ids'])} intel reports based on {len(response_watchlists)} Response watchlists.")
 
-        if args.list_watchlists:
-            watchlists = get_all_watchlists(cb)
-            if args.json:
-                print(json.dumps(watchlists, indent=2))
-            else:
-                for wl in watchlists:
-                    print(Watchlist(cb, initial_data=wl))
-                    print()
+        if args.intel_command == "watchlists":
+            if args.list_watchlists:
+                watchlists = get_all_watchlists(cb)
+                if args.json:
+                    print(json.dumps(watchlists, indent=2))
+                else:
+                    for wl in watchlists:
+                        print(Watchlist(cb, initial_data=wl))
+                        print()
 
-        if args.get_watchlist:
-            watchlist = get_watchlist(cb, args.get_watchlist)
-            print(json.dumps(watchlist, indent=2))
+            if args.get_watchlist:
+                watchlist = get_watchlist(cb, args.get_watchlist)
+                if watchlist:
+                    print(json.dumps(watchlist, indent=2))
 
-        if args.get_watchlist_report:
-            if args.json:
-                print(json.dumps(get_report_with_IOC_status(cb, args.get_watchlist_report), indent=2))
-            else:
-                report = get_report_with_IOC_status(cb, args.get_watchlist_report)
-                print_report(report)  # specifically helpful with query based IOCs
+            if args.get_watchlist_report:
+                if args.json:
+                    print(json.dumps(get_report_with_IOC_status(cb, args.get_watchlist_report), indent=2))
+                else:
+                    report = get_report_with_IOC_status(cb, args.get_watchlist_report)
+                    if report:
+                        print_report(report)  # specifically helpful with query based IOCs
+            
+            if args.delete_watchlist_report:
+                result = delete_report(cb, args.delete_watchlist_report)
+                if result.status_code == 204:
+                    LOGGER.info(f"deleted watchlist report")
 
-        if args.update_ioc_query:
-            report_id, ioc_id = args.update_ioc_query.split("/", 1)
-            updated_report = interactively_update_report_ioc_query(cb, report_id, ioc_id)
-            if updated_report:
-                LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
+            if args.update_ioc_query:
+                report_id, ioc_id = args.update_ioc_query.split("/", 1)
+                updated_report = interactively_update_report_ioc_query(cb, report_id, ioc_id)
+                if updated_report:
+                    LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
 
-        if args.list_feeds:
-            feeds = get_all_feeds(cb)
-            if args.json:
-                print(json.dumps(get_all_feeds(cb), indent=2))
-            else:
-                for f in feeds:
-                    print(Feed(cb, initial_data=f))
-                    print()
+        if args.intel_command == "feeds":
+            if args.list_feeds:
+                feeds = get_all_feeds(cb)
+                if args.json:
+                    print(json.dumps(get_all_feeds(cb), indent=2))
+                else:
+                    for f in feeds:
+                        print(Feed(cb, initial_data=f))
+                        print()
 
-        if args.get_feed:
-            feed = get_feed(cb, args.get_feed)
-            if not feed:
-                return None
-            if args.json:
-                print(json.dumps(feed, indent=2))
-            else:
-                print(Feed(cb, initial_data=feed))
+            if args.get_feed:
+                feed = get_feed(cb, args.get_feed)
+                if not feed:
+                    return None
+                if args.json:
+                    print(json.dumps(feed, indent=2))
+                else:
+                    print(Feed(cb, initial_data=feed))
 
-        if args.get_feed_report:
-            feed_id, report_id = args.get_feed_report.split("/", 1)
-            report = get_feed_report(cb, feed_id, report_id)
-            print(json.dumps(report, indent=2))
+            if args.get_feed_report:
+                try:
+                    feed_id, report_id = args.get_feed_report.split("/", 1)
+                except ValueError:
+                    feed_id, report_id = args.get_feed_report.split("-", 1)
+                report = get_feed_report(cb, feed_id, report_id)
+                print(json.dumps(report, indent=2))
 
         return True
 

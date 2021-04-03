@@ -1,20 +1,126 @@
-"""All things intel.
+"""All things intel & alerts.
 
-IOCs, Reports, Watchlists and Feeds.
+IOCs, Reports, Watchlists, Feeds, Alerts.
+
+NOTE on Response Watchlist to PSC EDR Intel Migrations:
+
+  There are three different ways that I built to migrate Response 
+  Watchlists to PSC EDR Watchlists:
+   1. One-to-One
+   2. Many-to-One
+   3. Many-to-Two (Not connected to CLI)
+
+ All of the above use the `yield_reports_created_from_response_watchlists` to convert
+ Response Watchlists into PSC EDR Reports. That function converts the Response queries to
+ valid PSC EDR queries. If a query doesn't validate/convert, a log is generated and it's 
+ skipped. If it does validate, a Report is generated. If the Watchlist, in Response, was really slow or
+ had errors the resulting PSC EDR Report will be set to "ignore" automatically. Additionally, I passed
+ all the available context about the Response Watchlist into the description of the resulting Reports.
+
+ We had over 300 custom Response Watchlists, here is what I did for our use case:
+  1. I seperated the watchlists with true positive detections and low FP rates 
+     using our ACE Alert metrics. I put the names of these Watchlists into a txt file
+     and then exported them from response using the following command:
+       `cat ~smcfeely/working/cbmigration/uniq.high_fidelity.watchlists.txt | cbinterface response_watchlist --watchlist-names-from-stdin -json > high_fid.response_watchlists.json`
+
+  2. Next, I used the command below to import these Response Watchlists into a single
+     PSC EDR Watchlist I called "ACE Higher Fidelity Response Watchlists":
+       `cbinterface intel migrate ~smcfeely/working/cbmigration/high_fid.response_watchlists.json --many-to-one`
+
+  3. After that, I exported the remaining custom Response Watchlists into another json file and called the
+     `convert_response_watchlists_to_grouped_psc_edr_watchlists` function from a python terminal to organize 
+     the Response Watchlists into *two* PSC EDR Watchlists, one for Response Watchlists that have never
+     had a hit and then the ones remaining are lower fidelity and went into a "Low Fidelity" PSC EDR Watchlist.
+        
 """
+import json
 import time
 import logging
 
 from dateutil import tz
 from dateutil.parser import parse as parse_timestamp
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Union
 
 from cbapi.psc.threathunter import CbThreatHunterAPI
 from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.intel")
 
+
+## Alerts ##
+def alert_search(
+    cb: CbThreatHunterAPI,
+    search_data: Dict={},
+    criteria: Dict={},
+    query: str=None,
+    rows=20,
+    sort: List[Dict]=[{'field': "last_update_time", "order": "ASC"}],
+    start: int=1,
+    workflow_state=["OPEN", "DISMISSED"]
+) -> Dict:
+    """Perform an Alert search.""" 
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/_search"
+    if not search_data:
+        if "workflow" not in criteria:
+            criteria["workflow"] = workflow_state
+        search_data = { "criteria": criteria,
+                        "query": query,
+                        "rows": rows,
+                        "start": start,
+                        "sort": sort
+                    }
+    try:
+        result = cb.post_object(url, search_data)
+        return result.json()
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError searching alerts: {e}")
+        return False
+    except ClientError as e:
+        LOGGER.warning(f"got ClientError searching alerts: {e}")
+        return False
+    except ValueError:
+        LOGGER.warning(f"got unexpected {result}")
+        return False
+
+def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
+    """Get alert by ID."""
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
+    try:
+        return cb.get_object(url)
+    except ServerError:
+        LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
+
+def update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Union["DISMISSED", "OPEN"], remediation_state: str=None, comment: str=None) -> Dict:
+    """Update alert remediation state by ID."""
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}/workflow"
+    remediation = {"state": state,
+                   "remediation_state": remediation_state,
+                   "comment": comment
+                }
+    try:
+        return cb.post_object(url, remediation).json()
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError: {e}")
+        return False
+    except ClientError as e:
+        LOGGER.warning(f"got ClientError:: {e}")
+        return False
+
+def interactively_update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Union["DISMISSED", "OPEN"]=None, remediation_state: str=None, comment: str=None) -> Dict:
+    """Update alert remediation state by ID."""
+    from cbinterface.helpers import input_with_timeout
+
+    if not state:
+        state = input_with_timeout("Alert state to set, DISMISSED or OPEN? [DISMISSED]: ") or "DISMISSED"
+        if state not in ["DISMISSED", "OPEN"]:
+            LOGGER.error(f"state must be one of [DISMISSED, OPEN], not {state}")
+            return False
+    if not remediation_state:
+        remediation_state = input_with_timeout("State of Remediation: ") or ""
+    if not comment:
+        comment = input_with_timeout("Comment: ") or ""
+    return update_alert_state(cb,  alert_id, state, remediation_state, comment)
 
 ## Reports ##
 def create_report(cb: CbThreatHunterAPI, report_data) -> Dict:
@@ -46,7 +152,7 @@ def delete_report(cb: CbThreatHunterAPI, report_id) -> Dict:
     try:
         return cb.delete_object(url)
     except ServerError:
-        LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
+        LOGGER.error(f"Caught ServerError deleting report {report_id}: {e}")
 
 
 def get_report_status(cb: CbThreatHunterAPI, report_id) -> Dict:
@@ -71,15 +177,21 @@ def get_report(cb: CbThreatHunterAPI, report_id) -> Dict:
     """Get report by report id."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
     try:
-        return cb.get_object(url)
+        report = cb.get_object(url)
+        report['ignored'] = get_report_status(cb, report['id'])["ignored"]
+        return report
     except ServerError:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"report {report_id} does not exist")
 
 
 def get_report_with_IOC_status(cb: CbThreatHunterAPI, report_id) -> Dict:
     """Get report and include status of every report IOC."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs"
     report = get_report(cb, report_id)
+    if not report:
+        return None
     for ioc in report["iocs_v2"]:
         ioc["ignored"] = cb.get_object(f"{url}/{ioc['id']}/ignore")["ignored"]
     return report
@@ -89,7 +201,9 @@ def update_report(cb: CbThreatHunterAPI, report_id, report_data) -> Dict:
     """Update an existing report."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
 
-    # clean up any ignored ioc fields or Cb will bark back
+    # clean up any ignored fields or Cb will bark back
+    if "ignored" in report_data:
+        del report_data["ignored"]
     for ioc in report_data["iocs_v2"]:
         if "ignored" in ioc:
             del ioc["ignored"]
@@ -178,6 +292,8 @@ def get_watchlist(cb: CbThreatHunterAPI, watchlist_id):
         return cb.get_object(f"{url}/{watchlist_id}")
     except ServerError:
         LOGGER.error(f"Caught ServerError getting watchlist {watchlist_id}: {e}")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"No watchlist with ID {watchlist_id}")
 
 
 def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
@@ -193,6 +309,13 @@ def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
 
     return result.json()
 
+def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
+    """Set this report to ignore status"""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
+    try:
+        return cb.delete_object(url)
+    except ServerError:
+        LOGGER.error(f"Caught ServerError deleting watchlist {watchlist_id}: {e}")
 
 def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
@@ -305,7 +428,7 @@ def get_feed_report(cb: CbThreatHunterAPI, feed_id: str, report_id: str) -> Dict
         LOGGER.warning(f"No feed {feed_id} or report {report_id} in the feed")
 
 
-## Response to PSC EDR Watchlist Migrations ##
+## Begin Response to PSC EDR Watchlist Migrations ##
 def yield_reports_created_from_response_watchlists(
     cb: CbThreatHunterAPI, response_watchlists: List[Dict]
 ) -> List[Dict]:
@@ -334,19 +457,17 @@ def yield_reports_created_from_response_watchlists(
             LOGGER.error(f"query did not validate")
             continue
 
-        # warn if already a watchlist by the same name
-        if wl_data["name"] in psc_watchlist_names:
-            LOGGER.warning(f"watchlist with name={wl_data['name']} already exists.")
-            continue
+        report_tags = ["response_migrated_watchlist"]
+        report_description = f"Legacy Cb Response Watchlist Description: {wl_data.get('description')}"
 
         ignore_this_report = False
-        # the next few checks will set the flag telling us if the report should
-        # be set to ignore
 
         # warn of disabled watchlists
         if not wl_data["enabled"]:
             LOGGER.warning(f"{wl_data['name']} is disabled... NOT creating report.")
             ignore_this_report = True
+            report_description += f"\nIgnored: disabled in Cb Response"
+            report_tags.append("disabled_in_response")
 
         # warn on slow watchlists
         if wl_data["last_execution_time_ms"] is None:
@@ -354,27 +475,35 @@ def yield_reports_created_from_response_watchlists(
                 f"{wl_data['name']} last_execution_time time is null. This means an error occurred with it's execution. Setting report to ignore."
             )
             ignore_this_report = True
+            report_description += f"\nIgnored: last execution error'd in Cb Response"
+            report_tags.append("execution_errors_in_response")
         elif int(wl_data["last_execution_time_ms"]) > 10000:
             seconds = int(wl_data["last_execution_time_ms"]) / 1000
             LOGGER.warning(f"{wl_data['name']} last_execution_time took {seconds} seconds")
+            report_tags.append("slow_in_response")
             if seconds > 30:
                 LOGGER.warning(f"{wl_data['name']} has been 💩 slow in response. Setting report to ignore...")
                 ignore_this_report = True
+                report_description += f"\nIgnored: has been 💩 slow in Cb Response. Improve it!?"
 
         # inform of hit count per day
         hit_count = int(wl_data["total_hits"])
+        if hit_count == 0:
+            report_tags.append("no_hits_in_response")
         created_date = parse_timestamp(wl_data["date_added"]).astimezone(tz.gettz("UTC"))
         days_since_creation = (datetime.utcnow().astimezone(tz.gettz("UTC")) - created_date).days
         LOGGER.info(f"{wl_data['name']} has a hit count per day ratio of: {hit_count/days_since_creation}")
-
+        report_description += f"\n\nCb Hit Count per day average: {hit_count/days_since_creation}"
+        
         # create report
         ioc_data = {"id": 1, "match_type": "query", "values": [query]}
+        report_description += f"\n\n===LEGACY DATA===\n{json.dumps(wl_data, indent=2)}"
         report_data = {
             "title": wl_data.get("name"),
-            "description": f"Intel report for legacy response watchlist. Legacy description: {wl_data.get('description')} {'(ignored)' if ignore_this_report else ''} \n===LEGACY DATA===\n{wl_data}",
+            "description": report_description,
             "timestamp": time.time(),
             "severity": 5,
-            "tags": ["response_migrated_watchlist"],
+            "tags": report_tags,
             "iocs_v2": [ioc_data],
         }
         intel_report = create_report(cb, report_data)
@@ -394,7 +523,7 @@ def convert_response_watchlists_to_psc_edr_watchlists(
 ) -> List[Dict]:
     """Convert a list of response watchlists to PSC EDR watchlists.
 
-    This is a one-for-one Watchlist migration.
+    This is a one-for-one Watchlist migration. You probably don't want this.
 
     Args:
       cb: Cb PSC object
@@ -405,11 +534,14 @@ def convert_response_watchlists_to_psc_edr_watchlists(
     results = []
     for intel_report in yield_reports_created_from_response_watchlists(cb, response_watchlists):
         report_id = intel_report["id"]
+        # get original description
+        name = intel_report.get("title")
+        description = [rwl.get("description", "") for rwl in response_watchlists if rwl["name"] == name][0]
 
         # create watchlist
         watchlist_data = {
-            "name": wl_data.get("name"),
-            "description": f"Legacy Response description: {wl_data.get('description')}",
+            "name": name,
+            "description": f"Legacy Response description: {description}",
             "tags_enabled": True,
             "alerts_enabled": True,
             "report_ids": [report_id],
@@ -419,8 +551,8 @@ def convert_response_watchlists_to_psc_edr_watchlists(
             LOGGER.error(f"problem creating watchlist for {watchlist_data}")
             continue
         LOGGER.info(f"created watchlist: {watchlist}")
-        psc_watchlist_names.append(watchlist["name"])
         results.append(watchlist)
+
     return results
 
 
@@ -428,7 +560,7 @@ def convert_response_watchlists_to_single_psc_edr_watchlist(
     cb: CbThreatHunterAPI,
     response_watchlists: List[Dict],
     watchlist_name: str = None,
-    watchlist_description="Consolidated Cb Respone Watchlists, Watchlist. Each report in this watchlist is based on a Cb Response Watchlist",
+    watchlist_description="Consolidated Cb Respone Watchlists. Each report in this watchlist is based on a Cb Response Watchlist",
 ) -> List[Dict]:
     """Convert a list of Response Watchlists to PSC EDR watchlists.
 
@@ -454,5 +586,46 @@ def convert_response_watchlists_to_single_psc_edr_watchlist(
         )
 
     reports = list(yield_reports_created_from_response_watchlists(cb, response_watchlists))
+    if not reports:
+        return None
 
     return create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, reports)
+
+
+def convert_response_watchlists_to_grouped_psc_edr_watchlists(
+    cb: CbThreatHunterAPI,
+    response_watchlists: List[Dict],
+    watchlist_names_start_with: str="ACE ",
+) -> List[Dict]:
+    """Convert a list of Response Watchlists to PSC EDR watchlists.
+
+    This is a many-to-two Watchlist migration based on metrics provided by Response.
+
+    Args:
+      cb: Cb PSC object
+      response_watchlists: List of Response Ratchlist in dictionary form.
+      watchlist_names_start_with: A key/identifer to start the watchlist names with.
+    Returns:
+      List of PSC Watchlists.
+    """
+    from cbinterface.helpers import input_with_timeout
+
+    reports = list(yield_reports_created_from_response_watchlists(cb, response_watchlists))
+    if not reports:
+        return None
+
+    results = []
+
+    # no hits
+    no_hit_reports = [r for r in reports if "no_hits_in_response" in r['tags']]
+    watchlist_name = f"{watchlist_names_start_with}CbResponse No Hit Watchlists"
+    watchlist_description = "Migrated Cb Response Watchlists that didn't have a hit."
+    results.append(create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, no_hit_reports))
+
+    # everything else is FP hits - low fidelity
+    low_fid_reports = [r for r in reports if "no_hits_in_response" not in r['tags']]
+    watchlist_name = f"{watchlist_names_start_with}CbResponse Lower Fidelity Watchlists"
+    watchlist_description = "Migrated Cb Response Watchlists that did have a hit but no True Positive ACE dispositions."
+    results.append(create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, low_fid_reports))
+
+    return results
