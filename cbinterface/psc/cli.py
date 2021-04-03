@@ -177,7 +177,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_watchlists.add_argument(
         "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
     )
-    parser_intel_watchlists.add_argument('-dr', '--delete-watchlist-report', action='store', help="Delete watchlist report by ID.")
+    parser_intel_watchlists.add_argument(
+        "-dr", "--delete-watchlist-report", action="store", help="Delete watchlist report by ID."
+    )
     parser_intel_watchlists.add_argument(
         "--update-ioc-query",
         action="store",
@@ -199,20 +201,40 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
 
     # alert parser plopped in here under intel
     parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
-    parser_intel_alerts.add_argument('-g', '--get-alert', action='store', help="Get a specific Alert by ID.")
-    parser_intel_alerts.add_argument('-d', '--dismiss-alert', action='store', help="Dismiss an Alert by ID.")
-    parser_intel_alerts.add_argument('-o', '--open-alert', action='store', help="Open an Alert by ID.")
-    parser_intel_alerts.add_argument('-u', '--interactively-update-alert', action='store', help="Update Alert by ID.")
-    parser_intel_alerts.add_argument('-r', '--remediation-state', action='store', help="An Alert remediation state to use with any state change actions.")
-    parser_intel_alerts.add_argument('-c', '--comment', action='store', help="An Alert comment to use with any state change actions.")
+    parser_intel_alerts.add_argument("-g", "--get-alert", action="store", help="Get a specific Alert by ID.")
+    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store", help="Dismiss an Alert by ID.")
+    parser_intel_alerts.add_argument("-o", "--open-alert", action="store", help="Open an Alert by ID.")
+    parser_intel_alerts.add_argument("-u", "--interactively-update-alert", action="store", help="Update Alert by ID.")
+    parser_intel_alerts.add_argument(
+        "-r",
+        "--remediation-state",
+        action="store",
+        help="An Alert remediation state to use with any state change actions.",
+    )
+    parser_intel_alerts.add_argument(
+        "-c", "--comment", action="store", help="An Alert comment to use with any state change actions."
+    )
 
     intel_alerts_subparsers = parser_intel_alerts.add_subparsers(dest="intel_alerts_command")
     # alert search parser
-    parser_intel_alerts_search = intel_alerts_subparsers.add_parser("search", help="Search Alerts with lucene syntax queries and/or value searches.")
-    parser_intel_alerts_search.add_argument('alert_query', action='store', help="The Alert search query.")
+    parser_intel_alerts_search = intel_alerts_subparsers.add_parser(
+        "search", help="Search Alerts with lucene syntax queries and/or value searches."
+    )
+    parser_intel_alerts_search.add_argument("alert_query", action="store", help="The Alert search query.")
     # TODO Add other arguments to allow for searching via start & end times, specifying rows, start, alert state
-    parser_intel_alerts_search.add_argument('-cr', '--create_time-range', action='store', help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]")
-    parser_intel_alerts_search.add_argument('-as', '--alert-states', action='append', choices=["DISMISSED", "OPEN"], help="Only return Alerts in these states.")
+    parser_intel_alerts_search.add_argument(
+        "-cr",
+        "--create_time-range",
+        action="store",
+        help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-as",
+        "--alert-states",
+        action="append",
+        choices=["DISMISSED", "OPEN"],
+        help="Only return Alerts in these states.",
+    )
 
     # cb response to psc migration parser
     parser_intel_migration = intel_subparsers.add_parser(
@@ -256,12 +278,20 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     print(json.dumps(alert, indent=2))
 
             if args.open_alert:
-                result = update_alert_state(cb, args.open_alert, state="OPEN", remediation_state=args.remediation_state, comment=args.comment)
+                result = update_alert_state(
+                    cb, args.open_alert, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
+                )
                 if result:
                     print(json.dumps(result, indent=2))
 
             if args.dismiss_alert:
-                result = update_alert_state(cb, args.dismiss_alert, state="DISMISSED", remediation_state=args.remediation_state, comment=args.comment)
+                result = update_alert_state(
+                    cb,
+                    args.dismiss_alert,
+                    state="DISMISSED",
+                    remediation_state=args.remediation_state,
+                    comment=args.comment,
+                )
                 if result:
                     print(json.dumps(result, indent=2))
 
@@ -296,7 +326,9 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 watchlist = convert_response_watchlists_to_single_psc_edr_watchlist(cb, response_watchlists)
                 if not watchlist:
                     return False
-                LOGGER.info(f"Created \"{watchlist['name']}\" containing {len(watchlist['report_ids'])} intel reports based on {len(response_watchlists)} Response watchlists.")
+                LOGGER.info(
+                    f"Created \"{watchlist['name']}\" containing {len(watchlist['report_ids'])} intel reports based on {len(response_watchlists)} Response watchlists."
+                )
 
         if args.intel_command == "watchlists":
             if args.list_watchlists:
@@ -320,7 +352,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     report = get_report_with_IOC_status(cb, args.get_watchlist_report)
                     if report:
                         print_report(report)  # specifically helpful with query based IOCs
-            
+
             if args.delete_watchlist_report:
                 result = delete_report(cb, args.delete_watchlist_report)
                 if result.status_code == 204:

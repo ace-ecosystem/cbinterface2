@@ -51,25 +51,20 @@ LOGGER = logging.getLogger("cbinterface.psc.intel")
 ## Alerts ##
 def alert_search(
     cb: CbThreatHunterAPI,
-    search_data: Dict={},
-    criteria: Dict={},
-    query: str=None,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    query: str = None,
     rows=20,
-    sort: List[Dict]=[{'field': "last_update_time", "order": "ASC"}],
-    start: int=1,
-    workflow_state=["OPEN", "DISMISSED"]
+    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    start: int = 1,
+    workflow_state=["OPEN", "DISMISSED"],
 ) -> Dict:
-    """Perform an Alert search.""" 
+    """Perform an Alert search."""
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/_search"
     if not search_data:
         if "workflow" not in criteria:
             criteria["workflow"] = workflow_state
-        search_data = { "criteria": criteria,
-                        "query": query,
-                        "rows": rows,
-                        "start": start,
-                        "sort": sort
-                    }
+        search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
     try:
         result = cb.post_object(url, search_data)
         return result.json()
@@ -83,6 +78,7 @@ def alert_search(
         LOGGER.warning(f"got unexpected {result}")
         return False
 
+
 def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
     """Get alert by ID."""
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
@@ -91,13 +87,17 @@ def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
     except ServerError:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
 
-def update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Union["DISMISSED", "OPEN"], remediation_state: str=None, comment: str=None) -> Dict:
+
+def update_alert_state(
+    cb: CbThreatHunterAPI,
+    alert_id,
+    state: Union["DISMISSED", "OPEN"],
+    remediation_state: str = None,
+    comment: str = None,
+) -> Dict:
     """Update alert remediation state by ID."""
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}/workflow"
-    remediation = {"state": state,
-                   "remediation_state": remediation_state,
-                   "comment": comment
-                }
+    remediation = {"state": state, "remediation_state": remediation_state, "comment": comment}
     try:
         return cb.post_object(url, remediation).json()
     except ServerError as e:
@@ -107,7 +107,14 @@ def update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Union["DISMISSED"
         LOGGER.warning(f"got ClientError:: {e}")
         return False
 
-def interactively_update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Union["DISMISSED", "OPEN"]=None, remediation_state: str=None, comment: str=None) -> Dict:
+
+def interactively_update_alert_state(
+    cb: CbThreatHunterAPI,
+    alert_id,
+    state: Union["DISMISSED", "OPEN"] = None,
+    remediation_state: str = None,
+    comment: str = None,
+) -> Dict:
     """Update alert remediation state by ID."""
     from cbinterface.helpers import input_with_timeout
 
@@ -120,7 +127,8 @@ def interactively_update_alert_state(cb: CbThreatHunterAPI, alert_id, state: Uni
         remediation_state = input_with_timeout("State of Remediation: ") or ""
     if not comment:
         comment = input_with_timeout("Comment: ") or ""
-    return update_alert_state(cb,  alert_id, state, remediation_state, comment)
+    return update_alert_state(cb, alert_id, state, remediation_state, comment)
+
 
 ## Reports ##
 def create_report(cb: CbThreatHunterAPI, report_data) -> Dict:
@@ -178,7 +186,7 @@ def get_report(cb: CbThreatHunterAPI, report_id) -> Dict:
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
     try:
         report = cb.get_object(url)
-        report['ignored'] = get_report_status(cb, report['id'])["ignored"]
+        report["ignored"] = get_report_status(cb, report["id"])["ignored"]
         return report
     except ServerError:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
@@ -309,6 +317,7 @@ def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
 
     return result.json()
 
+
 def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
     """Set this report to ignore status"""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
@@ -316,6 +325,7 @@ def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
         return cb.delete_object(url)
     except ServerError:
         LOGGER.error(f"Caught ServerError deleting watchlist {watchlist_id}: {e}")
+
 
 def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
@@ -494,7 +504,7 @@ def yield_reports_created_from_response_watchlists(
         days_since_creation = (datetime.utcnow().astimezone(tz.gettz("UTC")) - created_date).days
         LOGGER.info(f"{wl_data['name']} has a hit count per day ratio of: {hit_count/days_since_creation}")
         report_description += f"\n\nCb Hit Count per day average: {hit_count/days_since_creation}"
-        
+
         # create report
         ioc_data = {"id": 1, "match_type": "query", "values": [query]}
         report_description += f"\n\n===LEGACY DATA===\n{json.dumps(wl_data, indent=2)}"
@@ -595,7 +605,7 @@ def convert_response_watchlists_to_single_psc_edr_watchlist(
 def convert_response_watchlists_to_grouped_psc_edr_watchlists(
     cb: CbThreatHunterAPI,
     response_watchlists: List[Dict],
-    watchlist_names_start_with: str="ACE ",
+    watchlist_names_start_with: str = "ACE ",
 ) -> List[Dict]:
     """Convert a list of Response Watchlists to PSC EDR watchlists.
 
@@ -617,13 +627,13 @@ def convert_response_watchlists_to_grouped_psc_edr_watchlists(
     results = []
 
     # no hits
-    no_hit_reports = [r for r in reports if "no_hits_in_response" in r['tags']]
+    no_hit_reports = [r for r in reports if "no_hits_in_response" in r["tags"]]
     watchlist_name = f"{watchlist_names_start_with}CbResponse No Hit Watchlists"
     watchlist_description = "Migrated Cb Response Watchlists that didn't have a hit."
     results.append(create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, no_hit_reports))
 
     # everything else is FP hits - low fidelity
-    low_fid_reports = [r for r in reports if "no_hits_in_response" not in r['tags']]
+    low_fid_reports = [r for r in reports if "no_hits_in_response" not in r["tags"]]
     watchlist_name = f"{watchlist_names_start_with}CbResponse Lower Fidelity Watchlists"
     watchlist_description = "Migrated Cb Response Watchlists that did have a hit but no True Positive ACE dispositions."
     results.append(create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, low_fid_reports))
