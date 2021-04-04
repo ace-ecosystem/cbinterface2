@@ -21,7 +21,14 @@ from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
-from cbinterface.psc.ubs import request_and_get_files, get_file_metadata, get_device_summary, get_signature_summary, get_file_path_summary, consolidate_metadata_and_summaries
+from cbinterface.psc.ubs import (
+    request_and_get_files,
+    get_file_metadata,
+    get_device_summary,
+    get_signature_summary,
+    get_file_path_summary,
+    consolidate_metadata_and_summaries,
+)
 from cbinterface.psc.intel import (
     convert_response_watchlists_to_psc_edr_watchlists,
     get_all_watchlists,
@@ -167,15 +174,61 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
     # UBS parser
-    parser_ubs = subparsers.add_parser("ubs", help="Interface with the Universal Binary Store (UBS) to download files and/or get information.")
-    parser_ubs.add_argument("--sha256", dest="sha256hashes", action="append", default=[], help="The SHA-256 hash of a file you're interested in. Use multiple times to build list.")
-    parser_ubs.add_argument("--from-stdin", action='store_true', help="Read SHA-256 hashes piped from stdin to work with.")
-    parser_ubs.add_argument("-g", "--get-file", dest="ubs_get_file", action="store_true", help="Attempt to download file content for the SHA-256 hashes supplied by `--sha256`")
-    parser_ubs.add_argument("-ds", "--get-device-summary", dest="ubs_get_device_summary", action="store_true", help="Get an overview of the devices that executed the file.")
-    parser_ubs.add_argument("-ss", "--get-signature-summary", dest="ubs_get_signature_summary", action="store_true", help="Summary of the observed digital signature results for a given SHA-256 hashes.")
-    parser_ubs.add_argument("-fps", "--get-file-path-summary", dest="ubs_get_file_path_summary", action="store_true", help="Summary of the observed file paths for a given SHA-256 hashes.")
-    parser_ubs.add_argument("-i", "--get-metadata", dest="ubs_get_metadata", action="store_true", help="Get file metadata for give SHA-256 hashes.")
-    parser_ubs.add_argument("-ci", "--combined-info", dest="ubs_combined_info", action="store_true", help="Combine metadata and summaries per SHA-256")
+    parser_ubs = subparsers.add_parser(
+        "ubs", help="Interface with the Universal Binary Store (UBS) to download files and/or get information."
+    )
+    parser_ubs.add_argument(
+        "--sha256",
+        dest="sha256hashes",
+        action="append",
+        default=[],
+        help="The SHA-256 hash of a file you're interested in. Use multiple times to build list.",
+    )
+    parser_ubs.add_argument(
+        "--from-stdin", action="store_true", help="Read SHA-256 hashes piped from stdin to work with."
+    )
+    parser_ubs.add_argument(
+        "-g",
+        "--get-file",
+        dest="ubs_get_file",
+        action="store_true",
+        help="Attempt to download file content for the SHA-256 hashes supplied by `--sha256`",
+    )
+    parser_ubs.add_argument(
+        "-ds",
+        "--get-device-summary",
+        dest="ubs_get_device_summary",
+        action="store_true",
+        help="Get an overview of the devices that executed the file.",
+    )
+    parser_ubs.add_argument(
+        "-ss",
+        "--get-signature-summary",
+        dest="ubs_get_signature_summary",
+        action="store_true",
+        help="Summary of the observed digital signature results for a given SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-fps",
+        "--get-file-path-summary",
+        dest="ubs_get_file_path_summary",
+        action="store_true",
+        help="Summary of the observed file paths for a given SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-i",
+        "--get-metadata",
+        dest="ubs_get_metadata",
+        action="store_true",
+        help="Get file metadata for give SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-ci",
+        "--combined-info",
+        dest="ubs_combined_info",
+        action="store_true",
+        help="Combine metadata and summaries per SHA-256",
+    )
 
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
@@ -289,9 +342,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.sha256hashes:
 
-            set_ubs_args = [
-                arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True
-            ]
+            set_ubs_args = [arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True]
             if not set_ubs_args:
                 LOGGER.debug(f"seting ubs metadata argument as default.")
                 args.ubs_get_metadata = True
