@@ -2,6 +2,7 @@
 
 import os
 import re
+import sys
 import argparse
 import datetime
 import logging
@@ -20,6 +21,7 @@ from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
+from cbinterface.psc.ubs import request_and_get_files, get_file_metadata, get_device_summary, get_signature_summary, get_file_path_summary, consolidate_metadata_and_summaries
 from cbinterface.psc.intel import (
     convert_response_watchlists_to_psc_edr_watchlists,
     get_all_watchlists,
@@ -164,6 +166,17 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         help="UN-Quarantine the devices returned by the query.",
     )
 
+    # UBS parser
+    parser_ubs = subparsers.add_parser("ubs", help="Interface with the Universal Binary Store (UBS) to download files and/or get information.")
+    parser_ubs.add_argument("--sha256", dest="sha256hashes", action="append", default=[], help="The SHA-256 hash of a file you're interested in. Use multiple times to build list.")
+    parser_ubs.add_argument("--from-stdin", action='store_true', help="Read SHA-256 hashes piped from stdin to work with.")
+    parser_ubs.add_argument("-g", "--get-file", dest="ubs_get_file", action="store_true", help="Attempt to download file content for the SHA-256 hashes supplied by `--sha256`")
+    parser_ubs.add_argument("-ds", "--get-device-summary", dest="ubs_get_device_summary", action="store_true", help="Get an overview of the devices that executed the file.")
+    parser_ubs.add_argument("-ss", "--get-signature-summary", dest="ubs_get_signature_summary", action="store_true", help="Summary of the observed digital signature results for a given SHA-256 hashes.")
+    parser_ubs.add_argument("-fps", "--get-file-path-summary", dest="ubs_get_file_path_summary", action="store_true", help="Summary of the observed file paths for a given SHA-256 hashes.")
+    parser_ubs.add_argument("-i", "--get-metadata", dest="ubs_get_metadata", action="store_true", help="Get file metadata for give SHA-256 hashes.")
+    parser_ubs.add_argument("-ci", "--combined-info", dest="ubs_combined_info", action="store_true", help="Combine metadata and summaries per SHA-256")
+
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
     parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
@@ -268,6 +281,49 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     if not isinstance(cb, CbThreatHunterAPI):
         LOGGER.critical(f"Requires Cb PSC based API. Got '{product}' API.")
         return False
+
+    # UBS #
+    if args.command == "ubs":
+        if args.from_stdin:
+            args.sha256hashes.extend([line.strip() for line in sys.stdin])
+
+        if args.sha256hashes:
+
+            set_ubs_args = [
+                arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True
+            ]
+            if not set_ubs_args:
+                LOGGER.debug(f"seting ubs metadata argument as default.")
+                args.ubs_get_metadata = True
+
+            if args.ubs_get_file:
+                request_and_get_files(cb, sha256hashes=args.sha256hashes)
+            if args.ubs_get_device_summary:
+                summary = get_device_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_signature_summary:
+                summary = get_signature_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_file_path_summary:
+                summary = get_file_path_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_metadata:
+                # this is default if no arguments are specified with the sha256(s)
+                file_metadata = get_file_metadata(cb, sha256hashes=args.sha256hashes)
+                if file_metadata:
+                    print(json.dumps(file_metadata, indent=2))
+            if args.ubs_combined_info:
+                results = consolidate_metadata_and_summaries(cb, args.sha256hashes)
+                if results:
+                    print(json.dumps(results, indent=2))
+        else:
+            LOGGER.error(f"You must specify at least one sha256 with the `--sha256` argument.")
+            return False
+
+        return True
 
     # Intel #
     if args.command == "intel":
