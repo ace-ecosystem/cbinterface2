@@ -2,6 +2,7 @@
 
 import os
 import re
+import sys
 import argparse
 import datetime
 import logging
@@ -15,11 +16,37 @@ from cbapi import __file__ as cbapi_file_path
 from cbapi.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
 from cbapi.psc import Device
 from cbapi.psc.devices_query import DeviceSearchQuery
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process
+from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
 from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram
+from cbinterface.psc.ubs import (
+    request_and_get_files,
+    get_file_metadata,
+    get_device_summary,
+    get_signature_summary,
+    get_file_path_summary,
+    consolidate_metadata_and_summaries,
+)
+from cbinterface.psc.intel import (
+    convert_response_watchlists_to_psc_edr_watchlists,
+    get_all_watchlists,
+    get_watchlist,
+    get_report,
+    delete_report,
+    get_report_with_IOC_status,
+    print_report,
+    interactively_update_report_ioc_query,
+    convert_response_watchlists_to_single_psc_edr_watchlist,
+    get_all_feeds,
+    get_feed,
+    get_feed_report,
+    alert_search,
+    get_alert,
+    update_alert_state,
+    interactively_update_alert_state,
+)
 from cbinterface.psc.device import (
     make_device_query,
     device_info,
@@ -146,6 +173,154 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         help="UN-Quarantine the devices returned by the query.",
     )
 
+    # UBS parser
+    parser_ubs = subparsers.add_parser(
+        "ubs", help="Interface with the Universal Binary Store (UBS) to download files and/or get information."
+    )
+    parser_ubs.add_argument(
+        "--sha256",
+        dest="sha256hashes",
+        action="append",
+        default=[],
+        help="The SHA-256 hash of a file you're interested in. Use multiple times to build list.",
+    )
+    parser_ubs.add_argument(
+        "--from-stdin", action="store_true", help="Read SHA-256 hashes piped from stdin to work with."
+    )
+    parser_ubs.add_argument(
+        "-g",
+        "--get-file",
+        dest="ubs_get_file",
+        action="store_true",
+        help="Attempt to download file content for the SHA-256 hashes supplied by `--sha256`",
+    )
+    parser_ubs.add_argument(
+        "-ds",
+        "--get-device-summary",
+        dest="ubs_get_device_summary",
+        action="store_true",
+        help="Get an overview of the devices that executed the file.",
+    )
+    parser_ubs.add_argument(
+        "-ss",
+        "--get-signature-summary",
+        dest="ubs_get_signature_summary",
+        action="store_true",
+        help="Summary of the observed digital signature results for a given SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-fps",
+        "--get-file-path-summary",
+        dest="ubs_get_file_path_summary",
+        action="store_true",
+        help="Summary of the observed file paths for a given SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-i",
+        "--get-metadata",
+        dest="ubs_get_metadata",
+        action="store_true",
+        help="Get file metadata for give SHA-256 hashes.",
+    )
+    parser_ubs.add_argument(
+        "-ci",
+        "--combined-info",
+        dest="ubs_combined_info",
+        action="store_true",
+        help="Combine metadata and summaries per SHA-256",
+    )
+
+    # intel parser
+    parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
+    parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
+
+    intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
+
+    # intel watchlists
+    parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
+    parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
+    parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
+    parser_intel_watchlists.add_argument(
+        "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
+    )
+    parser_intel_watchlists.add_argument(
+        "-dr", "--delete-watchlist-report", action="store", help="Delete watchlist report by ID."
+    )
+    parser_intel_watchlists.add_argument(
+        "--update-ioc-query",
+        action="store",
+        help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id",
+    )
+
+    # intel feeds
+    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
+    parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
+    parser_intel_feeds.add_argument(
+        "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data"
+    )
+    parser_intel_feeds.add_argument(
+        "-fr",
+        "--get-feed-report",
+        action="store",
+        help="Get specific Report from specific Feed. format: feed_id/report_id",
+    )
+
+    # alert parser plopped in here under intel
+    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
+    parser_intel_alerts.add_argument("-g", "--get-alert", action="store", help="Get a specific Alert by ID.")
+    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store", help="Dismiss an Alert by ID.")
+    parser_intel_alerts.add_argument("-o", "--open-alert", action="store", help="Open an Alert by ID.")
+    parser_intel_alerts.add_argument("-u", "--interactively-update-alert", action="store", help="Update Alert by ID.")
+    parser_intel_alerts.add_argument(
+        "-r",
+        "--remediation-state",
+        action="store",
+        help="An Alert remediation state to use with any state change actions.",
+    )
+    parser_intel_alerts.add_argument(
+        "-c", "--comment", action="store", help="An Alert comment to use with any state change actions."
+    )
+
+    intel_alerts_subparsers = parser_intel_alerts.add_subparsers(dest="intel_alerts_command")
+    # alert search parser
+    parser_intel_alerts_search = intel_alerts_subparsers.add_parser(
+        "search", help="Search Alerts with lucene syntax queries and/or value searches."
+    )
+    parser_intel_alerts_search.add_argument("alert_query", action="store", help="The Alert search query.")
+    # TODO Add other arguments to allow for searching via start & end times, specifying rows, start, alert state
+    parser_intel_alerts_search.add_argument(
+        "-cr",
+        "--create_time-range",
+        action="store",
+        help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-as",
+        "--alert-states",
+        action="append",
+        choices=["DISMISSED", "OPEN"],
+        help="Only return Alerts in these states.",
+    )
+
+    # cb response to psc migration parser
+    parser_intel_migration = intel_subparsers.add_parser(
+        "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
+    )
+    parser_intel_migration.add_argument(
+        "response_watchlist_json_data_path",
+        help="Path to response watchlist json file. (see cbinterface response_watchlist",
+    )
+    parser_intel_migration.add_argument(
+        "--one-for-one",
+        action="store_true",
+        help="Create a PSC Watchlist for every CbR watchlist that passes validation.",
+    )
+    parser_intel_migration.add_argument(
+        "--many-to-one",
+        action="store_true",
+        help="Create a single PSC Watchlist containing all CbR watchlist queries that pass validation.",
+    )
+
 
 def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace) -> bool:
     """The logic to execute psc ThreatHunter specific command line arguments.
@@ -159,6 +334,171 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     if not isinstance(cb, CbThreatHunterAPI):
         LOGGER.critical(f"Requires Cb PSC based API. Got '{product}' API.")
         return False
+
+    # UBS #
+    if args.command == "ubs":
+        if args.from_stdin:
+            args.sha256hashes.extend([line.strip() for line in sys.stdin])
+
+        if args.sha256hashes:
+
+            set_ubs_args = [arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True]
+            if not set_ubs_args:
+                LOGGER.debug(f"seting ubs metadata argument as default.")
+                args.ubs_get_metadata = True
+
+            if args.ubs_get_file:
+                request_and_get_files(cb, sha256hashes=args.sha256hashes)
+            if args.ubs_get_device_summary:
+                summary = get_device_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_signature_summary:
+                summary = get_signature_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_file_path_summary:
+                summary = get_file_path_summary(cb, args.sha256hashes)
+                if summary:
+                    print(json.dumps(summary, indent=2))
+            if args.ubs_get_metadata:
+                # this is default if no arguments are specified with the sha256(s)
+                file_metadata = get_file_metadata(cb, sha256hashes=args.sha256hashes)
+                if file_metadata:
+                    print(json.dumps(file_metadata, indent=2))
+            if args.ubs_combined_info:
+                results = consolidate_metadata_and_summaries(cb, args.sha256hashes)
+                if results:
+                    print(json.dumps(results, indent=2))
+        else:
+            LOGGER.error(f"You must specify at least one sha256 with the `--sha256` argument.")
+            return False
+
+        return True
+
+    # Intel #
+    if args.command == "intel":
+        if args.intel_command == "alerts":
+            if args.get_alert:
+                alert = get_alert(cb, args.get_alert)
+                if alert:
+                    print(json.dumps(alert, indent=2))
+
+            if args.open_alert:
+                result = update_alert_state(
+                    cb, args.open_alert, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
+                )
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.dismiss_alert:
+                result = update_alert_state(
+                    cb,
+                    args.dismiss_alert,
+                    state="DISMISSED",
+                    remediation_state=args.remediation_state,
+                    comment=args.comment,
+                )
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.interactively_update_alert:
+                result = interactively_update_alert_state(cb, args.interactively_update_alert)
+                if result:
+                    print(json.dumps(result, indent=2))
+
+            if args.intel_alerts_command == "search":
+                criteria = {}
+                if args.create_time_range:
+                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
+                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
+                if results:
+                    print(json.dumps(results, indent=2))
+
+        if args.intel_command == "migrate":
+            response_watchlists = None
+            with open(args.response_watchlist_json_data_path, "r") as fp:
+                response_watchlists = json.load(fp)
+
+            if args.one_for_one:
+                results = convert_response_watchlists_to_psc_edr_watchlists(cb, response_watchlists)
+                LOGGER.info(
+                    f"created {len(results)} PSC watchlists from {len(response_watchlists)} Response watchlists."
+                )
+                print("Created watchlists:")
+                for wl in results:
+                    print(f" + ID={wl['id']} - Title={wl['name']}")
+
+            if args.many_to_one:
+                watchlist = convert_response_watchlists_to_single_psc_edr_watchlist(cb, response_watchlists)
+                if not watchlist:
+                    return False
+                LOGGER.info(
+                    f"Created \"{watchlist['name']}\" containing {len(watchlist['report_ids'])} intel reports based on {len(response_watchlists)} Response watchlists."
+                )
+
+        if args.intel_command == "watchlists":
+            if args.list_watchlists:
+                watchlists = get_all_watchlists(cb)
+                if args.json:
+                    print(json.dumps(watchlists, indent=2))
+                else:
+                    for wl in watchlists:
+                        print(Watchlist(cb, initial_data=wl))
+                        print()
+
+            if args.get_watchlist:
+                watchlist = get_watchlist(cb, args.get_watchlist)
+                if watchlist:
+                    print(json.dumps(watchlist, indent=2))
+
+            if args.get_watchlist_report:
+                if args.json:
+                    print(json.dumps(get_report_with_IOC_status(cb, args.get_watchlist_report), indent=2))
+                else:
+                    report = get_report_with_IOC_status(cb, args.get_watchlist_report)
+                    if report:
+                        print_report(report)  # specifically helpful with query based IOCs
+
+            if args.delete_watchlist_report:
+                result = delete_report(cb, args.delete_watchlist_report)
+                if result.status_code == 204:
+                    LOGGER.info(f"deleted watchlist report")
+
+            if args.update_ioc_query:
+                report_id, ioc_id = args.update_ioc_query.split("/", 1)
+                updated_report = interactively_update_report_ioc_query(cb, report_id, ioc_id)
+                if updated_report:
+                    LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
+
+        if args.intel_command == "feeds":
+            if args.list_feeds:
+                feeds = get_all_feeds(cb)
+                if args.json:
+                    print(json.dumps(get_all_feeds(cb), indent=2))
+                else:
+                    for f in feeds:
+                        print(Feed(cb, initial_data=f))
+                        print()
+
+            if args.get_feed:
+                feed = get_feed(cb, args.get_feed)
+                if not feed:
+                    return None
+                if args.json:
+                    print(json.dumps(feed, indent=2))
+                else:
+                    print(Feed(cb, initial_data=feed))
+
+            if args.get_feed_report:
+                try:
+                    feed_id, report_id = args.get_feed_report.split("/", 1)
+                except ValueError:
+                    feed_id, report_id = args.get_feed_report.split("-", 1)
+                report = get_feed_report(cb, feed_id, report_id)
+                print(json.dumps(report, indent=2))
+
+        return True
 
     # Device Quering #
     if args.command and args.command.startswith("d"):
@@ -222,8 +562,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_facet_histogram(processes)
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
-            #from cbinterface.psc.query import print_facet_histogram_v2
-            #print_facet_histogram_v2(cb, args.query)
+            # from cbinterface.psc.query import print_facet_histogram_v2
+            # print_facet_histogram_v2(cb, args.query)
 
         # don't display large results by default
         print_results = True
@@ -450,7 +790,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")
             if args.playbook_name:
                 playbook_data = get_playbook_map()[args.playbook_name]
-                playbook_path = playbook_data['path']
+                playbook_path = playbook_data["path"]
                 playbook_commands = build_playbook_commands(playbook_path)
                 commands.extend(playbook_commands)
                 LOGGER.info(f"loaded {len(playbook_commands)} playbook commands.")

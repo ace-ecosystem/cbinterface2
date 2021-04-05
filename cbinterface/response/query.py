@@ -10,7 +10,7 @@ from typing import Union
 from cbapi.response import CbResponseAPI, Process
 from cbapi.response.models import ProcessQuery
 
-LOGGER = logging.getLogger("cbinterface.query")
+LOGGER = logging.getLogger("cbinterface.response.query")
 
 
 def make_process_query(

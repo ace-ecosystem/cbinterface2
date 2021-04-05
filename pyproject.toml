@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "cbinterface"
-version = "2.2.0"
+version = "2.3.0"
 description = "command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions"
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://github.com/seanmcfeely/cbinterface2"
+homepage = "https://github.com/ace-ecosystem/cbinterface2"
 keywords = ["Carbon Black", "carbonblack"]
 include = ["README.md"]
 

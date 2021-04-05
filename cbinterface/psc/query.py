@@ -9,7 +9,7 @@ from typing import Union
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
-#from cbapi.psc.rest_api import CbPSCBaseAPI
+# from cbapi.psc.rest_api import CbPSCBaseAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.psc.threathunter.models import AsyncProcessQuery
 
@@ -44,6 +44,43 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     return True
 
 
+def is_valid_process_query_string(cb: CbThreatHunterAPI, query: str) -> bool:
+    """
+    Validates a process query string is valid for PSC.
+
+    Args:
+        cb: Cb PSC connection object
+        query (str): The query.
+    Returns:
+        True or False
+    """
+    args = {"q": query}
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_validation"
+    validated = cb.get_object(url, query_parameters=args)
+    if not validated.get("valid"):
+        return False
+    return True
+
+
+def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
+    """
+    Converts a legacy CB Response query to a ThreatHunter query.
+
+    Args:
+        cb: Cb PSC connection object
+        query (str): The query to convert.
+    Returns:
+        str: The converted query.
+    """
+    args = {"query": query}
+    resp = cb.post_object("/threathunter/feedmgr/v2/query/translate", args)
+    if resp.status_code != 200:
+        LOGGER.error(f"got {resp.status_code} attempting query conversion")
+        return False
+    resp = resp.json()
+    return resp.get("query")
+
+
 def make_process_query(
     cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
 ) -> AsyncProcessQuery:
@@ -64,6 +101,15 @@ def make_process_query(
         processes = cb.select(Process).where(query)
         if not is_valid_process_query(processes):
             LOGGER.info(f"For help, refer to {cb.url}/#userGuideLocation=search-guide/investigate-th&fullscreen")
+            LOGGER.info(f"Is this a legacy query? ... Attempting to convert to PSC query ...")
+            converted_query = convert_from_legacy_query(cb, query)
+            if not converted_query:
+                LOGGER.info(f"failed to convert to PSC query... 🤡 your query is jacked up.")
+                return []
+            if is_valid_process_query_string(cb, converted_query):
+                LOGGER.info("successfully converted and validated the query you supplied to a PSC query 👍, see below.")
+                LOGGER.info(f"👇👇 try again with the following query 👇👇 - also, hint, single quotes are your friend. ")
+                LOGGER.info(f"query: '{converted_query}'")
             return []
         if start_time or last_time:
             start_time = start_time.isoformat() if start_time else "*"
@@ -82,7 +128,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
     # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/cb-threathunter/latest/process-search-v2/#start-a-process-facet-job
     # Also, NOTE that this table lists fields that support faceting via the built in method, children is not one of them:
     # https://developer.carbonblack.com/reference/cb-threathunter/latest/process-search-fields/
-    from cbinterface.helpers import create_histogram_string, get_os_independant_filepath
+    from cbinterface.helpers import create_histogram_string, get_os_independent_filepath
 
     fields = [
         "parent_name",
@@ -105,7 +151,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                     LOGGER.info(f"condensing {value} to {value[0]}")
                 value = value[0]
             elif field_name in path_fields:
-                file_path = get_os_independant_filepath(value)
+                file_path = get_os_independent_filepath(value)
                 file_name = file_path.name
                 value = file_name
             if value not in facet_dict[field_name]:
@@ -122,7 +168,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                 continue
             children = proc.summary.children or []
             for cp in children:
-                process_path = get_os_independant_filepath(cp.get("process_name"))
+                process_path = get_os_independent_filepath(cp.get("process_name"))
                 process_name = process_path.name
                 if process_name not in facet_dict["childproc_name"]:
                     facet_dict["childproc_name"][process_name] = 1
@@ -146,7 +192,7 @@ def print_facet_histogram_v2(
 
     # NOTE: no support for childproc facets with this built-in
 
-    from cbinterface.helpers import get_os_independant_filepath
+    from cbinterface.helpers import get_os_independent_filepath
 
     post_data = {}
     post_data["query"] = query
@@ -187,7 +233,7 @@ def print_facet_histogram_v2(
         for entry in facets["values"]:
             entry_name = entry["name"]
             if field_name in path_fields and len(entry_name) > 55:
-                file_path = get_os_independant_filepath(entry_name)
+                file_path = get_os_independent_filepath(entry_name)
                 file_name = file_path.name
                 file_path = entry_name[: len(entry_name) - len(file_name)]
                 file_path = file_path[: 40 - len(file_name)]

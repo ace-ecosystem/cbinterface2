@@ -26,7 +26,7 @@ from cbinterface.config import (
     get_default_cbapi_profile,
     set_default_cbapi_profile,
     set_default_cbapi_product,
-    get_playbook_map
+    get_playbook_map,
 )
 
 from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
@@ -206,13 +206,13 @@ def main():
     parser_inspect.add_argument(
         "--json", action="store_true", help="Combine all results into json document and print the result."
     )
-    #parser_inspect.add_argument(
+    # parser_inspect.add_argument(
     #    "--segment-limit",
     #    action="store",
     #    type=int,
     #    default=None,
     #    help="stop processing events into json after this many process segments",
-    #)
+    # )
 
     # live response parser
     parser_lr = subparsers.add_parser(
@@ -259,12 +259,22 @@ def main():
     parser_playbook = lr_subparsers.add_parser(
         "playbook", aliases=["pb", "play"], help="Execute a live response playbook script."
     )
-    parser_playbook.add_argument("-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute.")
+    parser_playbook.add_argument(
+        "-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute."
+    )
     playbook_map = get_playbook_map()
-    playbook_names = [p['name'] for _,p in playbook_map.items()]
-    parser_playbook.add_argument("-p", "--playbook-name", action="store", choices=playbook_names, help="The name of a configured playbook to execute.")
+    playbook_names = [p["name"] for _, p in playbook_map.items()]
+    parser_playbook.add_argument(
+        "-p",
+        "--playbook-name",
+        action="store",
+        choices=playbook_names,
+        help="The name of a configured playbook to execute.",
+    )
     parser_playbook.add_argument("-l", "--list-playbooks", action="store_true", help="List configured playbooks.")
-    parser_playbook.add_argument("--write-template", action="store_true", help="write a playbook template file to use as example.")
+    parser_playbook.add_argument(
+        "--write-template", action="store_true", help="write a playbook template file to use as example."
+    )
 
     # live response collect parser
     parser_collect = lr_subparsers.add_parser("collect", help="Collect artifacts from hosts.")
@@ -291,7 +301,9 @@ def main():
     )
 
     # live response remediation parser
-    parser_remediate = lr_subparsers.add_parser("remediate", help="Perform remdiation (delete/kill) actions on device/sensor.")
+    parser_remediate = lr_subparsers.add_parser(
+        "remediate", help="Perform remdiation (delete/kill) actions on device/sensor."
+    )
     parser_remediate.add_argument(
         "-f", "--delete-file-path", action="store", help="delete the file at this path on the sensor"
     )
@@ -311,13 +323,18 @@ def main():
     parser_session = subparsers.add_parser("session", help="Interact with Cb live response server sessions.")
     if configured_products["response"]:
         parser_session.add_argument(
-            "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID (Response only)."
+            "-lss",
+            "--list-sensor-sessions",
+            action="store",
+            help="list all CbLR sessions associated to this sensor ID (Response only).",
         )
     parser_session.add_argument(
         "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
     )
     if configured_products["response"]:
-        parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only).")
+        parser_session.add_argument(
+            "-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only)."
+        )
     parser_session.add_argument("-g", "--get-session", action="store", help="get live response session by id.")
     parser_session.add_argument("-c", "--close-session", action="store", help="close live response session by id.")
     parser_session.add_argument(
@@ -328,7 +345,9 @@ def main():
     )
 
     # enumeration parser
-    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="Data enumerations for answering common questions.")
+    parser_enumeration = subparsers.add_parser(
+        "enumerate", aliases=["e"], help="Data enumerations for answering common questions."
+    )
     parser_enumeration.add_argument(
         "-lh",
         "--logon-history",
@@ -365,8 +384,8 @@ def main():
     # Functionality that doesn't require a Cb connection.
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
         if args.live_response_command and (
-                args.live_response_command.startswith("play") or args.live_response_command == "pb"
-            ):
+            args.live_response_command.startswith("play") or args.live_response_command == "pb"
+        ):
             if args.list_playbooks:
                 print(f"\nConfigured Playbooks:")
                 for pb_key, pb_metadata in playbook_map.items():
@@ -387,6 +406,7 @@ def main():
 
     # Connect and execute
     product, profile = args.environment.split(":", 1)
+    LOGGER.debug(f"using '{profile}' profile via the configured '{product}' product.")
     try:
         if product == "response":
             cb = CbResponseAPI(profile=profile)

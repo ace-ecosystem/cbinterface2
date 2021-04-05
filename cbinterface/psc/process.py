@@ -2,7 +2,6 @@
 """
 
 import json
-import inspect
 import logging
 
 from io import StringIO
@@ -13,7 +12,7 @@ from typing import Dict
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.errors import ObjectNotFoundError
 
-from cbinterface.helpers import as_configured_timezone, get_os_independant_filepath
+from cbinterface.helpers import as_configured_timezone, get_os_independent_filepath
 
 LOGGER = logging.getLogger("cbinterface.psc.process")
 
@@ -94,7 +93,7 @@ def print_process_info(proc: Process, return_string: bool = False, raw_print=Fal
         txt = str(proc)
     else:
         txt += f"  Process GUID: {proc.get('process_guid')}\n"
-        process_name = get_os_independant_filepath(proc.get("process_name", "None")).name
+        process_name = get_os_independent_filepath(proc.get("process_name", "None")).name
         txt += f"  Process Name: {process_name}\n"
         process_pid = [str(_) for _ in proc.get("process_pid", [])]
         txt += f"  Process PID: {', '.join(process_pid)}\n"
@@ -402,7 +401,7 @@ def inspect_process_tree(
         print_ancestry(proc)
         print_process_tree(proc)
 
-    process_name = get_os_independant_filepath(proc.get("process_name", "None")).name
+    process_name = get_os_independent_filepath(proc.get("process_name", "None")).name
     print(f"\n+ {process_name} - {proc.process_guid}")
     if info:
         print_process_info(proc, **kwargs)
