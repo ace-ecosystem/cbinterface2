@@ -256,7 +256,7 @@ def interactively_update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_
     """Prompt user for new query and update the report IOC query."""
     from cbinterface.helpers import input_with_timeout
 
-    new_ioc_query = input_with_timeout("Enter new query: ")
+    new_ioc_query = input_with_timeout("Enter new query: ", timeout=90)
     return update_report_ioc_query(cb, report_id, ioc_id, new_ioc_query)
 
 
@@ -302,6 +302,11 @@ def get_watchlist(cb: CbThreatHunterAPI, watchlist_id):
         LOGGER.error(f"Caught ServerError getting watchlist {watchlist_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No watchlist with ID {watchlist_id}")
+
+
+def get_watchlists_like_name(cb: CbThreatHunterAPI, watchlist_name):
+    """Return watchlists with watchlist_name in their name."""
+    return [wl for wl in get_all_watchlists(cb) if watchlist_name in wl['name']]
 
 
 def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
@@ -425,6 +430,10 @@ def get_feed(cb: CbThreatHunterAPI, feed_id: str) -> Dict:
         LOGGER.error(f"Caught ServerError getting feed {feed_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No feed by feed id {feed_id}")
+
+def search_feed_names(cb: CbThreatHunterAPI, name: str) -> List[Dict]:
+    """Search for feeds by name."""
+    return [f for f in get_all_feeds(cb) if name in f["name"]]
 
 
 def get_feed_report(cb: CbThreatHunterAPI, feed_id: str, report_id: str) -> Dict:
