@@ -152,8 +152,11 @@ class PutFile(BaseSessionCommand):
             return session.put_file(data, self.sensor_write_filepath)
         except Exception as e:
             LOGGER.error(f"couldn't put file: {e}")
+            return False
 
     def process_result(self):
+        if not self.result:
+            return False
         # it worked if execution makes it here
         LOGGER.info(f"put '{self.sensor_write_filepath}' on {self.hostname} via session {self.session_id}")
         if self.post_completion_command:
@@ -462,6 +465,23 @@ class GetFile(BaseSessionCommand):
         Returns:
             File content
         """
+        if "{WILDMATCH}" in self._file_path:
+            # split on "{WILDMATCH}" and search for the first match to collect
+            from cbinterface.helpers import get_os_independent_filepath
+
+            file_path_parts = [self.fill_placeholders(fpp) for fpp in self._file_path.split("{WILDMATCH}")]
+            dir_path = get_os_independent_filepath(file_path_parts[0]).parent
+            dir_path = f"{dir_path}\\" if "\\" in str(dir_path) else f"{dir_path}/"
+
+            LOGGER.info(f"attempting to find item at '{dir_path}' like {file_path_parts}")
+            for item in session.list_directory(dir_path):
+                if item["attributes"] == "DIRECTORY":
+                    continue
+                if [part for part in file_path_parts if part in item["filename"]]:
+                    LOGGER.info(f"found potential match: {item['filename']}")
+                    self._file_path = f"{dir_path}{item['filename']}"
+                    break
+
         self._file_path = self.fill_placeholders(self._file_path)
         return session.get_raw_file(self._file_path)
 
@@ -591,7 +611,7 @@ class KillProcessByName(BaseSessionCommand):
 
         for process in session.list_processes():
             filepath = get_os_independent_filepath(process["path"])
-            if self.pname in filepath.name:
+            if self.pname.lower() in filepath.name.lower():
                 LOGGER.info(f"found process to kill: {process['path']} - pid={process['pid']}")
                 self.nested_commands[process["pid"]] = session.kill_process(process["pid"])
 
