@@ -46,6 +46,8 @@ from cbinterface.psc.intel import (
     get_alert,
     update_alert_state,
     interactively_update_alert_state,
+    get_watchlists_like_name,
+    search_feed_names,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -240,6 +242,7 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
     parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
     parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
+    parser_intel_watchlists.add_argument("-wn", "--watchlist-name-search", action="store", help="Search for watchlists by name.")
     parser_intel_watchlists.add_argument(
         "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
     )
@@ -256,7 +259,10 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
     parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
     parser_intel_feeds.add_argument(
-        "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data"
+        "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data if using the `--json` arg."
+    )
+    parser_intel_feeds.add_argument(
+        "-s", "--search-for-feed", action="store", help="Search the Feeds for feed names containing this value."
     )
     parser_intel_feeds.add_argument(
         "-fr",
@@ -267,10 +273,11 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
 
     # alert parser plopped in here under intel
     parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
-    parser_intel_alerts.add_argument("-g", "--get-alert", action="store", help="Get a specific Alert by ID.")
-    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store", help="Dismiss an Alert by ID.")
-    parser_intel_alerts.add_argument("-o", "--open-alert", action="store", help="Open an Alert by ID.")
-    parser_intel_alerts.add_argument("-u", "--interactively-update-alert", action="store", help="Update Alert by ID.")
+    parser_intel_alerts.add_argument("-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with.")
+    parser_intel_alerts.add_argument("-g", "--get-alert", action="store_true", help="Get Alert information.")
+    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store_true", help="Dismiss an Alerts.")
+    parser_intel_alerts.add_argument("-o", "--open-alert", action="store_true", help="Set Alerts to Open (un-dismiss).")
+    parser_intel_alerts.add_argument("-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively.")
     parser_intel_alerts.add_argument(
         "-r",
         "--remediation-state",
@@ -279,6 +286,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
     parser_intel_alerts.add_argument(
         "-c", "--comment", action="store", help="An Alert comment to use with any state change actions."
+    )
+    parser_intel_alerts.add_argument(
+        "--from-stdin", action="store_true", help="Read alert IDs from stdin to work with."
     )
 
     intel_alerts_subparsers = parser_intel_alerts.add_subparsers(dest="intel_alerts_command")
@@ -379,33 +389,40 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     # Intel #
     if args.command == "intel":
         if args.intel_command == "alerts":
+            if args.from_stdin:
+                args.alert_ids.extend([line.strip().strip('"') for line in sys.stdin])
+
+            if not args.alert_ids:
+                LOGGER.error(f"You have to supply at least one alert ID.")
+                return False
+
             if args.get_alert:
-                alert = get_alert(cb, args.get_alert)
-                if alert:
-                    print(json.dumps(alert, indent=2))
+                alerts = [get_alert(cb, alert_id) for alert_id in args.alert_ids]
+                if alerts:
+                    print(json.dumps(alerts, indent=2))
 
             if args.open_alert:
-                result = update_alert_state(
-                    cb, args.open_alert, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
-                )
+                results = [ update_alert_state(
+                    cb, alert_id, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
+                ) for alert_id in args.alert_ids ]
                 if result:
-                    print(json.dumps(result, indent=2))
+                    print(json.dumps(results, indent=2))
 
             if args.dismiss_alert:
-                result = update_alert_state(
+                results = [ update_alert_state(
                     cb,
-                    args.dismiss_alert,
+                    alert_id,
                     state="DISMISSED",
                     remediation_state=args.remediation_state,
                     comment=args.comment,
-                )
-                if result:
-                    print(json.dumps(result, indent=2))
+                ) for alert_id in args.alert_ids ]
+                if results:
+                    print(json.dumps(results, indent=2))
 
             if args.interactively_update_alert:
-                result = interactively_update_alert_state(cb, args.interactively_update_alert)
-                if result:
-                    print(json.dumps(result, indent=2))
+                results = [interactively_update_alert_state(cb, alert_id) for alert_id in args.alert_ids ]
+                if results:
+                    print(json.dumps(results, indent=2))
 
             if args.intel_alerts_command == "search":
                 criteria = {}
@@ -452,6 +469,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if watchlist:
                     print(json.dumps(watchlist, indent=2))
 
+            if args.watchlist_name_search:
+                watchlists = get_watchlists_like_name(cb, args.watchlist_name_search)
+                if watchlists:
+                    if args.json:
+                        print(json.dumps(watchlists, indent=2))
+                    else:
+                        for wl in watchlists:
+                            print(Watchlist(cb, initial_data=wl))
+                            print()
+
+
             if args.get_watchlist_report:
                 if args.json:
                     print(json.dumps(get_report_with_IOC_status(cb, args.get_watchlist_report), indent=2))
@@ -474,8 +502,10 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         if args.intel_command == "feeds":
             if args.list_feeds:
                 feeds = get_all_feeds(cb)
+                if not feeds:
+                    return None
                 if args.json:
-                    print(json.dumps(get_all_feeds(cb), indent=2))
+                    print(json.dumps(feeds, indent=2))
                 else:
                     for f in feeds:
                         print(Feed(cb, initial_data=f))
@@ -489,6 +519,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     print(json.dumps(feed, indent=2))
                 else:
                     print(Feed(cb, initial_data=feed))
+
+            if args.search_for_feed:
+                feeds = search_feed_names(cb, args.search_for_feed)
+                if not feeds:
+                    return None
+                if args.json:
+                    print(json.dumps(feeds, indent=2))
+                else:
+                    for f in feeds:
+                        print(Feed(cb, initial_data=f))
+                        print()
 
             if args.get_feed_report:
                 try:

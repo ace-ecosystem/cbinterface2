@@ -111,7 +111,7 @@ def get_playbook_map():
     if CONFIG.has_section("playbooks"):
         playbook_paths.extend(list(CONFIG["playbooks"].values()))
 
-    for playbook_path in glob.glob(f"{HOME_PATH}/playbook_configs/*.ini"):
+    for playbook_path in playbook_paths:
         playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
         playbook = ConfigParser()
         try:

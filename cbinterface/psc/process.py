@@ -21,6 +21,11 @@ def load_process(p: Process) -> Process:
     """Load any process meta-data that exists or return None."""
     try:
         return Process.new_object(p._cb, p.summary._info["process"])
+    except RecursionError:
+        LOGGER.warning(f"RecursionError occurred loading process details.. loading incomplete details.")
+        url = f"/api/investigate/v1/orgs/{p._cb.credentials.org_key}/processes/summary"
+        summary = p._cb.get_object(url, query_parameters={"process_guid": p.process_guid})
+        return Process.new_object(p._cb, summary['process'])
     except ObjectNotFoundError:
         LOGGER.debug(f"Process data does not exist for GUID={p.get('process_guid')}")
         return None
@@ -158,6 +163,7 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
 
     if depth == 0:
         if not is_process_loaded(p):
+            
             p = load_process(p)
         print("\n------ Process Execution Tree ------")
         print()
@@ -168,7 +174,10 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
     print(f"  {'  '*(depth+1)}{command_line}  | {p.process_guid}")
 
     for child in p.children:
-        print_process_tree(child, max_depth=max_depth, depth=depth + 1)
+        try:
+            print_process_tree(child, max_depth=max_depth, depth=depth + 1)
+        except RecursionError:
+            LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
 
 
 def get_events_by_type(p: Process, event_type: str):
@@ -177,7 +186,7 @@ def get_events_by_type(p: Process, event_type: str):
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
         fileless_scriptload
     """
-    # we only load the process here to check for the present of event_types
+    # we only load the process here to check for the presence of event_types
     # only make event api calls for processes that report having those events
     if not is_process_loaded(p):
         p = load_process(p)
@@ -262,11 +271,11 @@ def print_netconns(p: Process, raw_print=False):
         if remote_ipv6:
             # TODO: insert a colon character between every four alphanumeric characters
             remote_ipv6 = f"ipv6({remote_ipv6})"
-        remote = f"to {remote_ipv4}{remote_ipv6}:{nc.netconn_remote_port}"
+        remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')}"
 
-        domain = f"domain={nc.netconn_domain}"
+        domain = f"(domain={nc.get('netconn_domain')})" if nc.get('netconn_domain') else ""
         print(
-            f" @{as_configured_timezone(nc.event_timestamp)}: {action} {direction} {protocol} {local} {remote} ({nc.netconn_domain})"
+            f" @{as_configured_timezone(nc.event_timestamp)}: {action} {direction} {protocol} {local} {remote} {domain}"
         )
     print()
 
@@ -421,17 +430,21 @@ def inspect_process_tree(
         print_scriptloads(proc, **kwargs)
 
     for child in proc.children:
-        inspect_process_tree(
-            child,
-            info=info,
-            filemods=filemods,
-            netconns=netconns,
-            regmods=regmods,
-            modloads=modloads,
-            crossprocs=crossprocs,
-            children=children,
-            scriptloads=scriptloads,
-            max_depth=max_depth,
-            depth=depth + 1,
-            **kwargs,
-        )
+        try:
+            inspect_process_tree(
+                child,
+                info=info,
+                filemods=filemods,
+                netconns=netconns,
+                regmods=regmods,
+                modloads=modloads,
+                crossprocs=crossprocs,
+                children=children,
+                scriptloads=scriptloads,
+                max_depth=max_depth,
+                depth=depth + 1,
+                **kwargs,
+            )
+        except RecursionError:
+            LOGGER.warning(f"hit RecursionError inspecting process tree.")
+            break
