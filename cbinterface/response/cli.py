@@ -245,7 +245,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 args.__setattr__(iarg, True)
 
         if args.json:
-            print(json.dumps(process_to_dict(proc), default=str))
+            print(json.dumps(process_to_dict(proc, max_segments=args.segment_limit), default=str))
             return
 
         if args.walk_and_inspect_tree:

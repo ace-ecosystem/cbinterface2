@@ -353,7 +353,7 @@ def test_process_to_dict(monkeypatch):
     proc = get_process(monkeypatch)
     cb = proc._cb
 
-    results = process_to_dict(proc)
+    results = process_to_dict(proc, max_segments=2)
     assert isinstance(results, dict)
 
 

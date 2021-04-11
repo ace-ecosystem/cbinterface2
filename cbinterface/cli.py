@@ -206,13 +206,13 @@ def main():
     parser_inspect.add_argument(
         "--json", action="store_true", help="Combine all results into json document and print the result."
     )
-    # parser_inspect.add_argument(
-    #    "--segment-limit",
-    #    action="store",
-    #    type=int,
-    #    default=None,
-    #    help="stop processing events into json after this many process segments",
-    # )
+    parser_inspect.add_argument(
+        "--segment-limit",
+        action="store",
+        type=int,
+        default=None,
+        help="stop processing events into json after this many process segments",
+    )
 
     # live response parser
     parser_lr = subparsers.add_parser(
