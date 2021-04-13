@@ -189,11 +189,11 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
     )
     print(f"  {'  '*(depth+1)}{command_line}  | {p.process_guid}")
 
-    for child in p.children:
-        try:
+    try:
+        for child in p.children:
             print_process_tree(child, max_depth=max_depth, depth=depth + 1)
-        except RecursionError:
-            LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
+    except RecursionError:
+        LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
 
 
 def get_events_by_type(p: Union[Process, Dict], event_type: str):
