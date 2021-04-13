@@ -389,6 +389,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     # Intel #
     if args.command == "intel":
         if args.intel_command == "alerts":
+
+            if args.intel_alerts_command == "search":
+                criteria = {}
+                if args.create_time_range:
+                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
+                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
+                if results:
+                    print(json.dumps(results, indent=2))
+
+                return True
+
             if args.from_stdin:
                 args.alert_ids.extend([line.strip().strip('"') for line in sys.stdin])
 
@@ -421,14 +432,6 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
             if args.interactively_update_alert:
                 results = [interactively_update_alert_state(cb, alert_id) for alert_id in args.alert_ids ]
-                if results:
-                    print(json.dumps(results, indent=2))
-
-            if args.intel_alerts_command == "search":
-                criteria = {}
-                if args.create_time_range:
-                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
                 if results:
                     print(json.dumps(results, indent=2))
 

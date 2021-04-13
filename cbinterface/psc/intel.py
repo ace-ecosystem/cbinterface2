@@ -60,7 +60,7 @@ def alert_search(
     workflow_state=["OPEN", "DISMISSED"],
 ) -> Dict:
     """Perform an Alert search."""
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/_search"
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/watchlist/_search"
     if not search_data:
         if "workflow" not in criteria:
             criteria["workflow"] = workflow_state
