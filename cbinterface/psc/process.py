@@ -262,8 +262,8 @@ def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool
             txt += str(nc)
             continue
         action = (
-            nc['netconn_action'][len("ACTION_CONNECTION_") :]
-            if nc.get('netconn_action', "").startswith("ACTION_CONNECTION_")
+            nc.get('netconn_action', '')[len("ACTION_CONNECTION_") :]
+            if nc.get('netconn_action', '').startswith("ACTION_CONNECTION_")
             else nc.get('netconn_action')
         )
         if action == "CREATE":
@@ -401,7 +401,7 @@ def print_crossprocs(p: Union[Process, Dict], raw_print=False, return_string: bo
         inverse_target = "from" if cp.get('crossproc_target') is True else "to"
         direction = "<-" if cp.get('crossproc_target') is True else "->"
         proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
-        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('rossproc_sha256')}) | {proc_guid_direction}\n"
+        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
     txt += "\n"
     if return_string:
         return txt
