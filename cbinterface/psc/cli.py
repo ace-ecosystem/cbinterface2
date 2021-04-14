@@ -394,7 +394,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 criteria = {}
                 if args.create_time_range:
                     criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
+                results = list(alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states))
                 if results:
                     print(json.dumps(results, indent=2))
 

@@ -66,8 +66,23 @@ def alert_search(
             criteria["workflow"] = workflow_state
         search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
     try:
-        result = cb.post_object(url, search_data)
-        return result.json()
+        position = start
+        still_querying = True
+        while still_querying:
+            search_data["start"] = position
+            resp = cb.post_object(url, search_data)
+            result = resp.json()
+
+            total_results = result["num_found"]
+            results = result.get("results", [])
+            LOGGER.debug(f"got {len(results)+position} out of {total_results} total unorganized alerts.")
+            for item in results:
+                yield item
+                position += 1
+
+            if position >= total_results:
+                still_querying = False
+                break
     except ServerError as e:
         LOGGER.error(f"Caught ServerError searching alerts: {e}")
         return False
