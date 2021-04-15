@@ -54,35 +54,24 @@ def alert_search(
     search_data: Dict = {},
     criteria: Dict = {},
     query: str = None,
-    rows=20,
+    rows=40,
     sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
-    start: int = 1,
+    start: int = 0,
     workflow_state=["OPEN", "DISMISSED"],
 ) -> Dict:
-    """Perform an Alert search."""
+    """Perform an Alert search
+    
+    One request and return the result.
+    """
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/watchlist/_search"
     if not search_data:
         if "workflow" not in criteria:
             criteria["workflow"] = workflow_state
         search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
     try:
-        position = start
-        still_querying = True
-        while still_querying:
-            search_data["start"] = position
-            resp = cb.post_object(url, search_data)
-            result = resp.json()
+        result = cb.post_object(url, search_data)
+        return result.json()
 
-            total_results = result["num_found"]
-            results = result.get("results", [])
-            LOGGER.debug(f"got {len(results)+position} out of {total_results} total unorganized alerts.")
-            for item in results:
-                yield item
-                position += 1
-
-            if position >= total_results:
-                still_querying = False
-                break
     except ServerError as e:
         LOGGER.error(f"Caught ServerError searching alerts: {e}")
         return False
@@ -93,6 +82,73 @@ def alert_search(
         LOGGER.warning(f"got unexpected {result}")
         return False
 
+
+def yield_alerts(
+    cb: CbThreatHunterAPI,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    query: str = None,
+    rows=40,
+    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    start: int = 0,
+    workflow_state=["OPEN", "DISMISSED"],
+    max_results: int=None, # limit results returned
+) -> Dict:
+    """Yield Alerts resulting from alert search."""
+    position = start
+    still_querying = True
+    while still_querying:
+        if max_results and position + rows > max_results:
+            # get however many rows that may result in max_results
+            rows = max_results - position
+        result = alert_search(cb, 
+                              search_data=search_data,
+                              criteria=criteria,
+                              query=query,
+                              rows=rows,
+                              sort=sort,
+                              start=position,
+                              workflow_state=workflow_state)
+
+        if not result:
+            return result
+
+        total_results = result["num_found"]
+        results = result.get("results", [])
+        LOGGER.debug(f"got {len(results)+position} out of {total_results} total alerts.")
+        for item in results:
+            yield item
+            position += 1
+            if max_results and position >= max_results:
+                still_querying = False
+                break
+
+        if position >= total_results:
+            still_querying = False
+            break
+
+
+def get_all_alerts(
+    cb: CbThreatHunterAPI,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    query: str = None,
+    rows=40,
+    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    start: int = 0,
+    workflow_state=["OPEN", "DISMISSED"],
+    max_results: int=None, # limit results returned
+) -> Dict:
+    """Return list of Alerts resulting from alert search."""
+    return list(yield_alerts(cb, 
+                              search_data=search_data,
+                              criteria=criteria,
+                              query=query,
+                              rows=rows,
+                              sort=sort,
+                              start=start,
+                              workflow_state=workflow_state,
+                              max_results=max_results))
 
 def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
     """Get alert by ID."""

@@ -42,12 +42,13 @@ from cbinterface.psc.intel import (
     get_all_feeds,
     get_feed,
     get_feed_report,
-    alert_search,
     get_alert,
+    get_all_alerts,
     update_alert_state,
     interactively_update_alert_state,
     get_watchlists_like_name,
     search_feed_names,
+    
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -305,6 +306,14 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
     )
     parser_intel_alerts_search.add_argument(
+        "-m",
+        "--max-alerts-result",
+        action="store",
+        default=100,
+        type=int,
+        help="Only return up to this many alerts. Default=100. HINT: set to '0' to return all results.",
+    )
+    parser_intel_alerts_search.add_argument(
         "-as",
         "--alert-states",
         action="append",
@@ -390,11 +399,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     if args.command == "intel":
         if args.intel_command == "alerts":
 
-            if args.intel_alerts_command == "search":
-                criteria = {}
+            if args.intel_alerts_command == "search": #'device_name': ['XW7R17'], 
+                # NOTE TODO: implement start and end time argparse options
+                #criteria = {'last_event_time': {'start': '2021-04-13T19:39:30.054855+00:00', 'end': '2021-04-14T19:39:30.054855+00:00'}, 'workflow': ['OPEN']}
                 if args.create_time_range:
                     criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = list(alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states))
+                results = get_all_alerts(cb, query=args.alert_query, workflow_state=args.alert_states, max_results=args.max_alerts_result)
                 if results:
                     print(json.dumps(results, indent=2))
 
