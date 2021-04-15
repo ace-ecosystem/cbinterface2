@@ -60,7 +60,7 @@ def alert_search(
     workflow_state=["OPEN", "DISMISSED"],
 ) -> Dict:
     """Perform an Alert search
-    
+
     One request and return the result.
     """
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/watchlist/_search"
@@ -92,7 +92,7 @@ def yield_alerts(
     sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
     start: int = 0,
     workflow_state=["OPEN", "DISMISSED"],
-    max_results: int=None, # limit results returned
+    max_results: int = None,  # limit results returned
 ) -> Dict:
     """Yield Alerts resulting from alert search."""
     position = start
@@ -101,14 +101,16 @@ def yield_alerts(
         if max_results and position + rows > max_results:
             # get however many rows that may result in max_results
             rows = max_results - position
-        result = alert_search(cb, 
-                              search_data=search_data,
-                              criteria=criteria,
-                              query=query,
-                              rows=rows,
-                              sort=sort,
-                              start=position,
-                              workflow_state=workflow_state)
+        result = alert_search(
+            cb,
+            search_data=search_data,
+            criteria=criteria,
+            query=query,
+            rows=rows,
+            sort=sort,
+            start=position,
+            workflow_state=workflow_state,
+        )
 
         if not result:
             return result
@@ -137,18 +139,23 @@ def get_all_alerts(
     sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
     start: int = 0,
     workflow_state=["OPEN", "DISMISSED"],
-    max_results: int=None, # limit results returned
+    max_results: int = None,  # limit results returned
 ) -> Dict:
     """Return list of Alerts resulting from alert search."""
-    return list(yield_alerts(cb, 
-                              search_data=search_data,
-                              criteria=criteria,
-                              query=query,
-                              rows=rows,
-                              sort=sort,
-                              start=start,
-                              workflow_state=workflow_state,
-                              max_results=max_results))
+    return list(
+        yield_alerts(
+            cb,
+            search_data=search_data,
+            criteria=criteria,
+            query=query,
+            rows=rows,
+            sort=sort,
+            start=start,
+            workflow_state=workflow_state,
+            max_results=max_results,
+        )
+    )
+
 
 def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
     """Get alert by ID."""
@@ -377,7 +384,7 @@ def get_watchlist(cb: CbThreatHunterAPI, watchlist_id):
 
 def get_watchlists_like_name(cb: CbThreatHunterAPI, watchlist_name):
     """Return watchlists with watchlist_name in their name."""
-    return [wl for wl in get_all_watchlists(cb) if watchlist_name in wl['name']]
+    return [wl for wl in get_all_watchlists(cb) if watchlist_name in wl["name"]]
 
 
 def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
@@ -501,6 +508,7 @@ def get_feed(cb: CbThreatHunterAPI, feed_id: str) -> Dict:
         LOGGER.error(f"Caught ServerError getting feed {feed_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No feed by feed id {feed_id}")
+
 
 def search_feed_names(cb: CbThreatHunterAPI, name: str) -> List[Dict]:
     """Search for feeds by name."""

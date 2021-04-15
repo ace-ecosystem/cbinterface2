@@ -25,7 +25,7 @@ def load_process(p: Process) -> Process:
         LOGGER.warning(f"RecursionError occurred loading process details.. loading incomplete details.")
         url = f"/api/investigate/v1/orgs/{p._cb.credentials.org_key}/processes/summary"
         summary = p._cb.get_object(url, query_parameters={"process_guid": p.process_guid})
-        return Process.new_object(p._cb, summary['process'])
+        return Process.new_object(p._cb, summary["process"])
     except ObjectNotFoundError:
         LOGGER.debug(f"Process data does not exist for GUID={p.get('process_guid')}")
         return None
@@ -54,9 +54,9 @@ def is_process_loaded(p: Process) -> bool:
     return True
 
 
-def process_to_dict(p: Process, max_events: int=None) -> Dict:
+def process_to_dict(p: Process, max_events: int = None) -> Dict:
     """Convert process and it's events to a dictionary.
-    
+
     Args:
       p: Carbon Black Cloud Process
       max_events: a limit on the amount of process events to add.
@@ -179,7 +179,7 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
 
     if depth == 0:
         if not is_process_loaded(p):
-            
+
             p = load_process(p)
         print("\n------ Process Execution Tree ------")
         print()
@@ -205,8 +205,8 @@ def get_events_by_type(p: Union[Process, Dict], event_type: str):
     """
     if isinstance(p, dict):
         # processing from json file
-        assert 'events' in p
-        return p['events'].get(event_type, [])
+        assert "events" in p
+        return p["events"].get(event_type, [])
 
     # we only load the process here to check for the presence of event_types
     # only make event api calls for processes that report having those events
@@ -236,7 +236,7 @@ def print_filemods(p: Union[Process, Dict], raw_print=False, return_string: bool
         if raw_print:
             txt += str(fm)
             continue
-        _action_summary = [action[len("ACTION_") :] for action in fm.get('filemod_action', [])]
+        _action_summary = [action[len("ACTION_") :] for action in fm.get("filemod_action", [])]
         _edge_actions = [action for action in _action_summary if not action.startswith("FILE")]
         _fm_action_summary = [action[len("FILE_") :] for action in _action_summary if action.startswith("FILE")]
         _fm_action_summary.extend(_edge_actions)
@@ -263,9 +263,9 @@ def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool
             txt += str(nc)
             continue
         action = (
-            nc.get('netconn_action', '')[len("ACTION_CONNECTION_") :]
-            if nc.get('netconn_action', '').startswith("ACTION_CONNECTION_")
-            else nc.get('netconn_action')
+            nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
+            if nc.get("netconn_action", "").startswith("ACTION_CONNECTION_")
+            else nc.get("netconn_action")
         )
         if action == "CREATE":
             # same behavior as PSC GUI
@@ -274,7 +274,7 @@ def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool
         protocol = nc.get("netconn_protocol", "")
         if protocol.startswith("PROTO_"):
             protocol = protocol[len("PROTO_") :]
-        direction = "inbound" if nc.get('netconn_inbound') else "outbound"
+        direction = "inbound" if nc.get("netconn_inbound") else "outbound"
 
         # NOTE: Cb stores ipv4 as integers and returns them as such. Their documentation is lacking but
         # research suggests they follow https://tools.ietf.org/html/rfc1700 and big-endian int can be assumed.
@@ -297,7 +297,7 @@ def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool
             remote_ipv6 = f"ipv6({remote_ipv6})"
         remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')}"
 
-        domain = f"(domain={nc.get('netconn_domain')})" if nc.get('netconn_domain') else ""
+        domain = f"(domain={nc.get('netconn_domain')})" if nc.get("netconn_domain") else ""
         txt += f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local} {remote} {domain}\n"
     txt += "\n"
     if return_string:
@@ -317,7 +317,7 @@ def print_regmods(p: Union[Process, Dict], raw_print=False, return_string: bool 
             txt += str(rm)
             continue
         actions = []
-        for a in rm.get('regmod_action'):
+        for a in rm.get("regmod_action"):
             if a.startswith("ACTION_"):
                 actions.append(a[len("ACTION_") :])
             else:
@@ -394,13 +394,13 @@ def print_crossprocs(p: Union[Process, Dict], raw_print=False, return_string: bo
         if raw_print:
             txt += str(cp)
             continue
-        actions = [a[len("ACTION_") :] for a in cp.get('crossproc_action', [])]
+        actions = [a[len("ACTION_") :] for a in cp.get("crossproc_action", [])]
         if len(actions) == 1:
             actions = actions[0]
         else:
             actions = ",".join(actions)
-        inverse_target = "from" if cp.get('crossproc_target') is True else "to"
-        direction = "<-" if cp.get('crossproc_target') is True else "->"
+        inverse_target = "from" if cp.get("crossproc_target") is True else "to"
+        direction = "<-" if cp.get("crossproc_target") is True else "->"
         proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
         txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
     txt += "\n"
