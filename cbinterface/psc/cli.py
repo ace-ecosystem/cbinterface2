@@ -42,8 +42,8 @@ from cbinterface.psc.intel import (
     get_all_feeds,
     get_feed,
     get_feed_report,
-    alert_search,
     get_alert,
+    get_all_alerts,
     update_alert_state,
     interactively_update_alert_state,
     get_watchlists_like_name,
@@ -242,7 +242,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
     parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
     parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
-    parser_intel_watchlists.add_argument("-wn", "--watchlist-name-search", action="store", help="Search for watchlists by name.")
+    parser_intel_watchlists.add_argument(
+        "-wn", "--watchlist-name-search", action="store", help="Search for watchlists by name."
+    )
     parser_intel_watchlists.add_argument(
         "-wr", "--get-watchlist-report", action="store", help="Get a watchlist report by report ID."
     )
@@ -259,7 +261,10 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
     parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
     parser_intel_feeds.add_argument(
-        "-f", "--get-feed", action="store", help="Get Feed by ID. WARNING: Can return a lot of data if using the `--json` arg."
+        "-f",
+        "--get-feed",
+        action="store",
+        help="Get Feed by ID. WARNING: Can return a lot of data if using the `--json` arg.",
     )
     parser_intel_feeds.add_argument(
         "-s", "--search-for-feed", action="store", help="Search the Feeds for feed names containing this value."
@@ -273,11 +278,15 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
 
     # alert parser plopped in here under intel
     parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
-    parser_intel_alerts.add_argument("-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with.")
+    parser_intel_alerts.add_argument(
+        "-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with."
+    )
     parser_intel_alerts.add_argument("-g", "--get-alert", action="store_true", help="Get Alert information.")
     parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store_true", help="Dismiss an Alerts.")
     parser_intel_alerts.add_argument("-o", "--open-alert", action="store_true", help="Set Alerts to Open (un-dismiss).")
-    parser_intel_alerts.add_argument("-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively.")
+    parser_intel_alerts.add_argument(
+        "-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively."
+    )
     parser_intel_alerts.add_argument(
         "-r",
         "--remediation-state",
@@ -303,6 +312,14 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "--create_time-range",
         action="store",
         help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-m",
+        "--max-alerts-result",
+        action="store",
+        default=100,
+        type=int,
+        help="Only return up to this many alerts. Default=100. HINT: set to '0' to return all results.",
     )
     parser_intel_alerts_search.add_argument(
         "-as",
@@ -389,6 +406,20 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     # Intel #
     if args.command == "intel":
         if args.intel_command == "alerts":
+
+            if args.intel_alerts_command == "search":  #'device_name': ['XW7R17'],
+                # NOTE TODO: implement start and end time argparse options
+                # criteria = {'last_event_time': {'start': '2021-04-13T19:39:30.054855+00:00', 'end': '2021-04-14T19:39:30.054855+00:00'}, 'workflow': ['OPEN']}
+                if args.create_time_range:
+                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
+                results = get_all_alerts(
+                    cb, query=args.alert_query, workflow_state=args.alert_states, max_results=args.max_alerts_result
+                )
+                if results:
+                    print(json.dumps(results, indent=2))
+
+                return True
+
             if args.from_stdin:
                 args.alert_ids.extend([line.strip().strip('"') for line in sys.stdin])
 
@@ -402,33 +433,31 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     print(json.dumps(alerts, indent=2))
 
             if args.open_alert:
-                results = [ update_alert_state(
-                    cb, alert_id, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
-                ) for alert_id in args.alert_ids ]
+                results = [
+                    update_alert_state(
+                        cb, alert_id, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
+                    )
+                    for alert_id in args.alert_ids
+                ]
                 if result:
                     print(json.dumps(results, indent=2))
 
             if args.dismiss_alert:
-                results = [ update_alert_state(
-                    cb,
-                    alert_id,
-                    state="DISMISSED",
-                    remediation_state=args.remediation_state,
-                    comment=args.comment,
-                ) for alert_id in args.alert_ids ]
+                results = [
+                    update_alert_state(
+                        cb,
+                        alert_id,
+                        state="DISMISSED",
+                        remediation_state=args.remediation_state,
+                        comment=args.comment,
+                    )
+                    for alert_id in args.alert_ids
+                ]
                 if results:
                     print(json.dumps(results, indent=2))
 
             if args.interactively_update_alert:
-                results = [interactively_update_alert_state(cb, alert_id) for alert_id in args.alert_ids ]
-                if results:
-                    print(json.dumps(results, indent=2))
-
-            if args.intel_alerts_command == "search":
-                criteria = {}
-                if args.create_time_range:
-                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = alert_search(cb, query=args.alert_query, criteria=criteria, workflow_state=args.alert_states)
+                results = [interactively_update_alert_state(cb, alert_id) for alert_id in args.alert_ids]
                 if results:
                     print(json.dumps(results, indent=2))
 
@@ -478,7 +507,6 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                         for wl in watchlists:
                             print(Watchlist(cb, initial_data=wl))
                             print()
-
 
             if args.get_watchlist_report:
                 if args.json:

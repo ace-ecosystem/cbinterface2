@@ -7,7 +7,7 @@ import logging
 from io import StringIO
 from datetime import datetime
 from contextlib import redirect_stdout
-from typing import Dict
+from typing import Dict, Union
 
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.errors import ObjectNotFoundError
@@ -25,7 +25,7 @@ def load_process(p: Process) -> Process:
         LOGGER.warning(f"RecursionError occurred loading process details.. loading incomplete details.")
         url = f"/api/investigate/v1/orgs/{p._cb.credentials.org_key}/processes/summary"
         summary = p._cb.get_object(url, query_parameters={"process_guid": p.process_guid})
-        return Process.new_object(p._cb, summary['process'])
+        return Process.new_object(p._cb, summary["process"])
     except ObjectNotFoundError:
         LOGGER.debug(f"Process data does not exist for GUID={p.get('process_guid')}")
         return None
@@ -54,17 +54,33 @@ def is_process_loaded(p: Process) -> bool:
     return True
 
 
-def process_to_dict(p: Process) -> Dict:
-    """Convert process and it's events to a dictionary."""
+def process_to_dict(p: Process, max_events: int = None) -> Dict:
+    """Convert process and it's events to a dictionary.
+
+    Args:
+      p: Carbon Black Cloud Process
+      max_events: a limit on the amount of process events to add.
+    Returns:
+      Dictionary representation of the process
+    """
+    # TODO: add start & end args so process events during a specific
+    #  time window can be pulled. This could be added for several functions on this page.
     process = {}
     if not is_process_loaded(p):
         p = load_process(p)
     process["info"] = p._info
     process["events"] = {}
+    event_count = 0
     for event in p.events():
         if event.event_type not in process["events"]:
             process["events"][event.event_type] = []
         process["events"][event.event_type].append(event._info)
+        event_count += 1
+        if max_events is not None:
+            assert isinstance(max_events, int)
+            if event_count >= max_events:
+                LOGGER.info(f"max event limit of {max_events} reached.")
+                break
 
     process["process_ancestry"] = StringIO()
     with redirect_stdout(process["process_ancestry"]):
@@ -163,7 +179,7 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
 
     if depth == 0:
         if not is_process_loaded(p):
-            
+
             p = load_process(p)
         print("\n------ Process Execution Tree ------")
         print()
@@ -173,19 +189,25 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
     )
     print(f"  {'  '*(depth+1)}{command_line}  | {p.process_guid}")
 
-    for child in p.children:
-        try:
+    try:
+        for child in p.children:
             print_process_tree(child, max_depth=max_depth, depth=depth + 1)
-        except RecursionError:
-            LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
+    except RecursionError:
+        LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
+        print(" [!] reached recursion limit walking process tree ...")
 
 
-def get_events_by_type(p: Process, event_type: str):
+def get_events_by_type(p: Union[Process, Dict], event_type: str):
     """Return process events by event type.
 
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
         fileless_scriptload
     """
+    if isinstance(p, dict):
+        # processing from json file
+        assert "events" in p
+        return p["events"].get(event_type, [])
+
     # we only load the process here to check for the presence of event_types
     # only make event api calls for processes that report having those events
     if not is_process_loaded(p):
@@ -201,7 +223,7 @@ def get_events_by_type(p: Process, event_type: str):
         return []
 
 
-def print_filemods(p: Process, raw_print=False, **kwargs):
+def print_filemods(p: Union[Process, Dict], raw_print=False, return_string: bool = False, **kwargs):
     """Print file modifications.
 
     one or more of ACTION_INVALID, ACTION_FILE_CREATE, ACTION_FILE_WRITE, ACTION_FILE_DELETE, ACTION_FILE_LAST_WRITE, ACTION_FILE_MOD_OPEN,
@@ -209,23 +231,25 @@ def print_filemods(p: Process, raw_print=False, **kwargs):
      ACTION_FILE_OPEN_EXECUTE, ACTION_FILE_READ
     """
 
-    print("------ FILEMODS ------")
+    txt = "------ FILEMODS ------\n"
     for fm in get_events_by_type(p, "filemod"):
         if raw_print:
-            print(fm)
+            txt += str(fm)
             continue
-        # action_summary = ', '.join([action[len('ACTION_'):] for action in fm.filemod_action])
-        _action_summary = [action[len("ACTION_") :] for action in fm.filemod_action]
+        _action_summary = [action[len("ACTION_") :] for action in fm.get("filemod_action", [])]
         _edge_actions = [action for action in _action_summary if not action.startswith("FILE")]
         _fm_action_summary = [action[len("FILE_") :] for action in _action_summary if action.startswith("FILE")]
         _fm_action_summary.extend(_edge_actions)
         action_summary = ",".join(_fm_action_summary)
         fm_sha256 = f" , sha256:{fm.get('filemod_sha256')}" if fm.get("filemod_sha256") else ""
-        print(f" @{as_configured_timezone(fm.event_timestamp)}: |{action_summary}| {fm.filemod_name}{fm_sha256}")
-    print()
+        txt += f" @{as_configured_timezone(fm.get('event_timestamp'))}: |{action_summary}| {fm.get('filemod_name')}{fm_sha256}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_netconns(p: Process, raw_print=False):
+def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print network connection events.
 
     action is one or more of: ACTION_CONNECTION_CREATE, ACTION_CONNECTION_CLOSE,
@@ -233,15 +257,15 @@ def print_netconns(p: Process, raw_print=False):
     """
     import socket, struct
 
-    print("------ NETCONNS ------")
+    txt = "------ NETCONNS ------\n"
     for nc in get_events_by_type(p, "netconn"):
         if raw_print:
-            print(nc)
+            txt += str(nc)
             continue
         action = (
-            nc.netconn_action[len("ACTION_CONNECTION_") :]
-            if nc.netconn_action.startswith("ACTION_CONNECTION_")
-            else nc.netconn_action
+            nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
+            if nc.get("netconn_action", "").startswith("ACTION_CONNECTION_")
+            else nc.get("netconn_action")
         )
         if action == "CREATE":
             # same behavior as PSC GUI
@@ -250,7 +274,7 @@ def print_netconns(p: Process, raw_print=False):
         protocol = nc.get("netconn_protocol", "")
         if protocol.startswith("PROTO_"):
             protocol = protocol[len("PROTO_") :]
-        direction = "inbound" if nc.netconn_inbound else "outbound"
+        direction = "inbound" if nc.get("netconn_inbound") else "outbound"
 
         # NOTE: Cb stores ipv4 as integers and returns them as such. Their documentation is lacking but
         # research suggests they follow https://tools.ietf.org/html/rfc1700 and big-endian int can be assumed.
@@ -262,7 +286,7 @@ def print_netconns(p: Process, raw_print=False):
         if local_ipv6:
             # TODO: insert a colon character between every four alphanumeric characters
             local_ipv6 = f"ipv6({local_ipv6})"
-        local = f"from {local_ipv4}{local_ipv6}:{nc.netconn_local_port}"
+        local = f"from {local_ipv4}{local_ipv6}:{nc.get('netconn_local_port')}"
 
         remote_ipv4 = nc.get("netconn_remote_ipv4", "")
         if remote_ipv4:
@@ -273,26 +297,27 @@ def print_netconns(p: Process, raw_print=False):
             remote_ipv6 = f"ipv6({remote_ipv6})"
         remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')}"
 
-        domain = f"(domain={nc.get('netconn_domain')})" if nc.get('netconn_domain') else ""
-        print(
-            f" @{as_configured_timezone(nc.event_timestamp)}: {action} {direction} {protocol} {local} {remote} {domain}"
-        )
-    print()
+        domain = f"(domain={nc.get('netconn_domain')})" if nc.get("netconn_domain") else ""
+        txt += f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local} {remote} {domain}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_regmods(p: Process, raw_print=False):
+def print_regmods(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print registry modifications.
 
     Actions: ACTION_INVALID, ACTION_CREATE_KEY, ACTION_WRITE_VALUE, ACTION_DELETE_KEY, ACTION_DELETE_VALUE,
         ACTION_RENAME_KEY, ACTION_RESTORE_KEY, ACTION_REPLACE_KEY, ACTION_SET_SECURITY
     """
-    print("------ REGMODS ------")
+    txt = "------ REGMODS ------\n"
     for rm in get_events_by_type(p, "regmod"):
         if raw_print:
-            print(rm)
+            txt += str(rm)
             continue
         actions = []
-        for a in rm.regmod_action:
+        for a in rm.get("regmod_action"):
             if a.startswith("ACTION_"):
                 actions.append(a[len("ACTION_") :])
             else:
@@ -303,42 +328,47 @@ def print_regmods(p: Process, raw_print=False):
             action = "Created"
         elif action == "WRITE_VALUE":
             action = "Modified"
-        print(f" @{as_configured_timezone(rm.event_timestamp)}: {action}: {rm.regmod_name}")
-    print()
+        txt += f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_scriptloads(p: Process, raw_print=False):
+def print_scriptloads(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print scriptloads and fileless scriptloads."""
-    print("------ SCRIPTLOADS ------")
+    txt = "------ SCRIPTLOADS ------\n"
     for sl in get_events_by_type(p, "scriptload"):
         if raw_print:
-            print(sl)
+            txt += str(sl)
             continue
 
         pub_state = ",".join([state[len("FILE_SIGNATURE_") :] for state in sl.get("scriptload_publisher_state", [])])
-        print(
-            f" @{as_configured_timezone(sl.event_timestamp)}: {sl.scriptload_name} , sha256={sl.scriptload_sha256} - {pub_state}"
-        )
-    print()
+        txt += f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}\n"
+
+    txt += "\n"
     fileless_sl_events = get_events_by_type(p, "fileless_scriptload")
     if fileless_sl_events:
-        print("------ FILELESS SCRIPTLOADS ------")
+        txt += "------ FILELESS SCRIPTLOADS ------\n"
     for fsl in fileless_sl_events:
         if raw_print:
-            print(fsl)
+            txt += str(fsl)
             continue
 
-        print(f" @{as_configured_timezone(fsl.event_timestamp)}: {fsl.fileless_scriptload_cmdline}")
-    print()
+        txt += f" @{as_configured_timezone(fsl.get('event_timestamp'))}: {fsl.get('fileless_scriptload_cmdline')}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_modloads(p: Process, raw_print=False):
+def print_modloads(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print modual/library loads."""
 
-    print("------ MODLOADS ------")
+    txt = "------ MODLOADS ------\n"
     for ml in get_events_by_type(p, "modload"):
         if raw_print:
-            print(ml)
+            txt += str(ml)
             continue
         # "for now can only be: ACTION_LOAD_MODULE"
         # action = "Loaded" if ml.modload_action == 'ACTION_LOAD_MODULE' else ml.modload_action
@@ -346,46 +376,51 @@ def print_modloads(p: Process, raw_print=False):
             "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])])
             or ""
         )
-        print(
-            f" @{as_configured_timezone(ml.event_timestamp)}: {ml.modload_name} , md5:{ml.modload_md5} - {ml.get('modload_publisher')}: {ml_pub_state_summary}"
-        )
-    print()
+        txt += f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_crossprocs(p: Process, raw_print=False):
+def print_crossprocs(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print Cross Process activity.
 
     Actions: ACTION_DUP_PROCESS_HANDLE, ACTION_OPEN_THREAD_HANDLE, ACTION_DUP_THREAD_HANDLE,
         ACTION_CREATE_REMOTE_THREAD, ACTION_API_CALL
     """
-    print("------ CROSSPROCS ------")
+    txt = "------ CROSSPROCS ------\n"
     for cp in get_events_by_type(p, "crossproc"):
         if raw_print:
-            print(cp)
+            txt += str(cp)
             continue
-        actions = [a[len("ACTION_") :] for a in cp.crossproc_action]
+        actions = [a[len("ACTION_") :] for a in cp.get("crossproc_action", [])]
         if len(actions) == 1:
             actions = actions[0]
         else:
             actions = ",".join(actions)
-        inverse_target = "from" if cp.crossproc_target is True else "to"
-        direction = "<-" if cp.crossproc_target is True else "->"
-        proc_guid_direction = f"{cp.process_guid} {direction} {cp.crossproc_process_guid}"
-        print(
-            f" @{as_configured_timezone(cp.event_timestamp)}: {actions} {inverse_target} {cp.crossproc_name} ({cp.crossproc_sha256}) | {proc_guid_direction}"
-        )
-    print()
+        inverse_target = "from" if cp.get("crossproc_target") is True else "to"
+        direction = "<-" if cp.get("crossproc_target") is True else "->"
+        proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
+        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
-def print_childprocs(p: Process, raw_print=False):
+def print_childprocs(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
     """Print child process events."""
-    print("------ CHILDPROCS ------")
+    txt = "------ CHILDPROCS ------\n"
     for cp in get_events_by_type(p, "childproc"):
         if raw_print:
-            print(cp)
+            txt += str(cp)
             continue
-        print(f" @{as_configured_timezone(cp.event_timestamp)}: {cp.childproc_cmdline}  - {cp.childproc_process_guid}")
-    print()
+        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {cp.get('childproc_cmdline')}  - {cp.get('childproc_process_guid')}"
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
 
 
 def inspect_process_tree(
