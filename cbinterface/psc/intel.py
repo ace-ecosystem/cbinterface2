@@ -55,7 +55,7 @@ def alert_search(
     criteria: Dict = {},
     query: str = None,
     rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    sort: List[Dict] = [{"field": "first_event_time", "order": "DESC"}],
     start: int = 0,
     workflow_state=["OPEN", "DISMISSED"],
 ) -> Dict:
