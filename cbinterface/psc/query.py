@@ -82,7 +82,11 @@ def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
 
 
 def make_process_query(
-    cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
+    cb: CbThreatHunterAPI,
+    query: str,
+    start_time: datetime.datetime = None,
+    last_time: datetime.datetime = None,
+    raise_exceptions=True,
 ) -> AsyncProcessQuery:
     """Query the CbThreatHunterAPI environment and interface results.
 
@@ -117,6 +121,8 @@ def make_process_query(
             processes = processes.where(f"process_start_time:[{start_time} TO {end_time}]")
         LOGGER.info(f"got {len(processes)} process results.")
     except Exception as e:
+        if raise_exceptions:
+            raise (e)
         LOGGER.error(f"unexpected exception: {e}")
 
     return processes

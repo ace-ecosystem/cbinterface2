@@ -37,6 +37,7 @@ LOGGER = logging.getLogger("cbinterface.cli")
 
 SUPPORTED_PRODUCTS = ["response", "psc"]
 
+
 def load_configured_environments():
     """Load Carbon Black environments from config files."""
     # set custom attributes
@@ -52,6 +53,7 @@ def load_configured_environments():
 
     return configured_environments
 
+
 def main():
     """Main entry point for cbinterface."""
 
@@ -66,7 +68,7 @@ def main():
     configured_environments = load_configured_environments()
     environments = []
     # create human friendly options for the CLI
-    for product,profiles in configured_environments.items():
+    for product, profiles in configured_environments.items():
         for profile in profiles:
             environments.append(f"{product}:{profile}")
 
