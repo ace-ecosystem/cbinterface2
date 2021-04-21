@@ -87,6 +87,7 @@ def make_process_query(
     start_time: datetime.datetime = None,
     last_time: datetime.datetime = None,
     raise_exceptions=True,
+    validate_query=False
 ) -> AsyncProcessQuery:
     """Query the CbThreatHunterAPI environment and interface results.
 
@@ -96,6 +97,8 @@ def make_process_query(
         start_time: Set the process start time (UTC).
         last_time: Set the process last time (UTC). Only processes with a start
         time that falls before this last_time.
+        raise_exceptions: Let any exceptions raise up (library use)
+        validate_query: If True, validate the query before attempting to use it.
     Returns: AsyncProcessQuery or empty list.
     """
 
@@ -103,7 +106,7 @@ def make_process_query(
     processes = []
     try:
         processes = cb.select(Process).where(query)
-        if not is_valid_process_query(processes):
+        if validate_query and not is_valid_process_query(processes):
             LOGGER.info(f"For help, refer to {cb.url}/#userGuideLocation=search-guide/investigate-th&fullscreen")
             LOGGER.info(f"Is this a legacy query? ... Attempting to convert to PSC query ...")
             converted_query = convert_from_legacy_query(cb, query)

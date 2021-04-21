@@ -625,7 +625,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             datetime.datetime.strptime(args.last_time, "%Y-%m-%d %H:%M:%S") if args.last_time else args.last_time
         )
         processes = make_process_query(
-            cb, args.query, start_time=args.start_time, last_time=args.last_time, raise_exceptions=False
+            cb, args.query, start_time=args.start_time, last_time=args.last_time, raise_exceptions=False, validate_query=True
         )
 
         if args.facets:
