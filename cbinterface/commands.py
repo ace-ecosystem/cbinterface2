@@ -41,7 +41,7 @@ class BaseSessionCommand:
         placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
-        placeholders["WORK_DIR"] = placeholders.get("WORK_DIR", "C:\\Windows\\System32")
+        placeholders["WORK_DIR"] = placeholders.get("WORK_DIR", "C:\\Program Files")
         string_item = string_item.format(**placeholders)
         return string_item
 
