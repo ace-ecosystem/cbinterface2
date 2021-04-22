@@ -353,6 +353,7 @@ def print_report(report: Dict) -> None:
             print(f"\t\t{field}: {value}")
         for ioc_value in ioc["values"]:
             print(f"\t\tioc_value: {ioc_value}")
+        print()
     print()
 
 
