@@ -411,7 +411,8 @@ def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
 
 
 def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
-    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
+    watchlist_id = watchlist_data['id']
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
     try:
         result = cb.put_object(url, watchlist_data)
     except ServerError as e:

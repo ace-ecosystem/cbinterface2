@@ -14,7 +14,11 @@ LOGGER = logging.getLogger("cbinterface.response.query")
 
 
 def make_process_query(
-    cb: CbResponseAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
+    cb: CbResponseAPI,
+    query: str,
+    start_time: datetime.datetime = None,
+    last_time: datetime.datetime = None,
+    raise_exceptions=True,
 ) -> ProcessQuery:
     """Query the CbResponse environment and interface results.
 
@@ -35,6 +39,8 @@ def make_process_query(
         processes = processes.max_last_server_update(last_time) if last_time else processes
         LOGGER.info(f"got {len(processes)} process results grouped by id.")
     except Exception as e:
+        if raise_exceptions:
+            raise (e)
         LOGGER.error(f"problem querying carbonblack with '{query}' : {e}")
 
     return processes

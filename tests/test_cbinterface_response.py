@@ -177,11 +177,11 @@ def test_make_cb_response_query(monkeypatch):
         return {}
 
     cb = fake_cb_response_api(monkeypatch)
-    result = make_process_query(cb, "hostname:hippo")
+    result = make_process_query(cb, "hostname:hippo", raise_exceptions=False)
     assert isinstance(result, ProcessQuery)
-    result = make_process_query(cb, "hostname:hippo", datetime.now())
+    result = make_process_query(cb, "hostname:hippo", datetime.now(), raise_exceptions=False)
     assert isinstance(result, ProcessQuery)
-    result = make_process_query(cb, "hostname:hippo", datetime.now(), datetime.now())
+    result = make_process_query(cb, "hostname:hippo", datetime.now(), datetime.now(), raise_exceptions=False)
     assert isinstance(result, ProcessQuery)
     monkeypatch.setattr(cb, "get_object", _get_query_results)
     assert len(result) == 0

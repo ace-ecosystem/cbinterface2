@@ -175,7 +175,9 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
         args.last_time = (
             datetime.datetime.strptime(args.last_time, "%Y-%m-%d %H:%M:%S") if args.last_time else args.last_time
         )
-        processes = make_process_query(cb, args.query, start_time=args.start_time, last_time=args.last_time)
+        processes = make_process_query(
+            cb, args.query, start_time=args.start_time, last_time=args.last_time, raise_exceptions=False
+        )
 
         if args.facets:
             LOGGER.info("getting facet data...")

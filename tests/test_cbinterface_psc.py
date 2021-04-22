@@ -68,7 +68,7 @@ def test_make_process_query(monkeypatch):
     from cbinterface.psc.query import make_process_query
 
     cb = fake_cb_api(monkeypatch)
-    assert isinstance(make_process_query(cb, "process_name:loop.exe"), AsyncProcessQuery)
+    assert isinstance(make_process_query(cb, "process_name:loop.exe", raise_exceptions=False), AsyncProcessQuery)
 
 
 def test_is_valid_process_query(monkeypatch):
@@ -83,7 +83,7 @@ def test_is_valid_process_query(monkeypatch):
 
     cb = fake_cb_api(monkeypatch)
     monkeypatch.setattr(cb, "get_object", _get_object)
-    query = make_process_query(cb, "process_name:loop.exe")
+    query = make_process_query(cb, "process_name:loop.exe", raise_exceptions=False)
     assert is_valid_process_query(query) is True
 
 

@@ -35,6 +35,24 @@ from cbinterface.scripted_live_response import write_playbook_template, write_re
 
 LOGGER = logging.getLogger("cbinterface.cli")
 
+SUPPORTED_PRODUCTS = ["response", "psc"]
+
+
+def load_configured_environments():
+    """Load Carbon Black environments from config files."""
+    # set custom attributes
+    default_profile = cbapi.auth.default_profile
+    default_profile["lr_token"] = None  # needed for psc
+
+    configured_environments = {}
+    for product in SUPPORTED_PRODUCTS:
+        configured_environments[product] = []
+        # FileCredentialStore loads `default_profile`
+        for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
+            configured_environments[product].append(profile)
+
+    return configured_environments
+
 
 def main():
     """Main entry point for cbinterface."""
@@ -47,20 +65,11 @@ def main():
     signal.signal(signal.SIGINT, clean_exit)
 
     # load carbonblack environment profiles #
-
-    # set custom attributes
-    default_profile = cbapi.auth.default_profile
-    default_profile["lr_token"] = None  # needed for psc
-
-    # locate configured environments
-    supported_products = ["response", "psc"]
+    configured_environments = load_configured_environments()
     environments = []
-    configured_products = {}
-    for product in supported_products:
-        configured_products[product] = False
-        # FileCredentialStore loads `default_profile`
-        for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
-            configured_products[product] = True
+    # create human friendly options for the CLI
+    for product, profiles in configured_environments.items():
+        for profile in profiles:
             environments.append(f"{product}:{profile}")
 
     # chose the default environment
@@ -224,14 +233,14 @@ def main():
     )
     parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
     parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")
-    if configured_products["response"]:
+    if configured_environments["response"]:
         parser_lr.add_argument(
             "-i",
             "--sensor-isolation-toggle",
             action="store_true",
             help="Sensor hostname/ID to isolation/unisolate (on/off). (CB Response)",
         )
-    if configured_products["psc"]:
+    if configured_environments["psc"]:
         parser_lr.add_argument(
             "-q",
             "--quarantine",
@@ -321,7 +330,7 @@ def main():
     # session parser - NOTE: functionality is limited on the PSC side, and it's specifically annoying that
     # we can not get a list of active psc lr sessions... or at least I haven't figure out how to do that.
     parser_session = subparsers.add_parser("session", help="Interact with Cb live response server sessions.")
-    if configured_products["response"]:
+    if configured_environments["response"]:
         parser_session.add_argument(
             "-lss",
             "--list-sensor-sessions",
@@ -331,7 +340,7 @@ def main():
     parser_session.add_argument(
         "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
     )
-    if configured_products["response"]:
+    if configured_environments["response"]:
         parser_session.add_argument(
             "-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only)."
         )
@@ -356,9 +365,9 @@ def main():
     )
 
     # only add independent product args if product is a configured option
-    if configured_products["response"]:
+    if configured_environments["response"]:
         add_response_arguments_to_parser(subparsers)
-    if configured_products["psc"]:
+    if configured_environments["psc"]:
         add_psc_arguments_to_parser(subparsers)
 
     argcomplete.autocomplete(parser)
