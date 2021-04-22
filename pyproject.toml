@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cbinterface"
-version = "2.3.12"
+version = "2.3.13"
 description = "command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions"
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 license = "Apache-2.0"
