@@ -7,7 +7,9 @@ HOME_PATH = os.path.dirname(os.path.abspath(__file__))
 
 def test_version():
     from cbinterface import __version__
-    assert __version__ == "2.3.13"
+
+    assert __version__ == "2.3.14"
+
 
 def test_timezone_settings():
     from dateutil import tz
@@ -32,12 +34,15 @@ def test_cbapi_environment_settings():
     set_default_cbapi_profile("stacks")
     assert f"{get_default_cbapi_product()}:{get_default_cbapi_profile()}" == "more_buckets:stacks"
 
+
 def test_playbook_map():
     from cbinterface.config import get_playbook_map
+
     playbook_map = get_playbook_map()
     assert isinstance(playbook_map, dict)
     playbook = list(playbook_map.values())[0]
-    assert list(playbook.keys()) == ['path', 'name', 'description']
+    assert list(playbook.keys()) == ["path", "name", "description"]
+
 
 def test_playbook_build():
     from cbinterface.scripted_live_response import build_playbook_commands
@@ -50,15 +55,23 @@ def test_playbook_build():
     assert isinstance(commands[1], ExecuteCommand)
     assert isinstance(commands[2], GetFile)
 
+
 def test_remediation_script():
     from cbinterface.scripted_live_response import build_remediation_commands
-    from cbinterface.commands import ( GetFile, PutFile, ExecuteCommand, DeleteFile,
-                                       KillProcessByID, KillProcessByName,
-                                       DeleteRegistryKeyValue, DeleteRegistryKey)
+    from cbinterface.commands import (
+        GetFile,
+        PutFile,
+        ExecuteCommand,
+        DeleteFile,
+        KillProcessByID,
+        KillProcessByName,
+        DeleteRegistryKeyValue,
+        DeleteRegistryKey,
+    )
 
     cmds = build_remediation_commands(f"{HOME_PATH}/test_data/remediating.around.ini")
     assert isinstance(cmds, list)
-    #for cmd in cmds:
+    # for cmd in cmds:
     #    print(type(cmd))
     assert len(cmds) == 16
     assert isinstance(cmds[0], KillProcessByID)

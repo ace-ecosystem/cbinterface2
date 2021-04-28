@@ -359,10 +359,28 @@ def print_report(report: Dict) -> None:
 
 ## IOCs ##
 # get IOC status
+def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Return status of IOC."""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    return cb.get_object(url)["ignored"]
+
 
 # ignore IOC
+def ignore_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Ignore this IOC."""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    return cb.put_object(url, {"ignore": True})
+
 
 # activate IOC
+def activate_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Activate IOC."""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    resp = cb.delete_object(url)
+    if resp.status_code == 204:
+        return True
+    return False
+
 
 ## Watchlists ##
 def get_all_watchlists(cb: CbThreatHunterAPI):
@@ -412,7 +430,7 @@ def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
 
 
 def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
-    watchlist_id = watchlist_data['id']
+    watchlist_id = watchlist_data["id"]
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
     try:
         result = cb.put_object(url, watchlist_data)

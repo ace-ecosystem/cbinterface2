@@ -87,7 +87,7 @@ def make_process_query(
     start_time: datetime.datetime = None,
     last_time: datetime.datetime = None,
     raise_exceptions=True,
-    validate_query=False
+    validate_query=False,
 ) -> AsyncProcessQuery:
     """Query the CbThreatHunterAPI environment and interface results.
 

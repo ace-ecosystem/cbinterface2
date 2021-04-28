@@ -48,6 +48,9 @@ from cbinterface.psc.intel import (
     interactively_update_alert_state,
     get_watchlists_like_name,
     search_feed_names,
+    is_ioc_ignored,
+    ignore_ioc,
+    activate_ioc,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -256,6 +259,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         action="store",
         help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id",
     )
+    parser_intel_watchlists.add_argument("--get-ioc-status", action="store", help="Get active/ignore status of an IOC.")
+    parser_intel_watchlists.add_argument("--ignore-ioc", action="store", help="Ignore IOC.")
+    parser_intel_watchlists.add_argument("--activate-ioc", action="store", help="Activate IOC.")
 
     # intel feeds
     parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
@@ -527,6 +533,24 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if updated_report:
                     LOGGER.info(f"Query IOC ID={ioc_id} of report ID={report_id} successfully updated.")
 
+            if args.get_ioc_status:
+                report_id, ioc_id = args.get_ioc_status.split("/", 1)
+                status = is_ioc_ignored(cb, report_id, ioc_id)
+                status = "IGNORED" if status else "ACTIVE"
+                print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
+
+            if args.ignore_ioc:
+                report_id, ioc_id = args.ignore_ioc.split("/", 1)
+                status = ignore_ioc(cb, report_id, ioc_id)
+                status = "IGNORED" if status else "ACTIVE"
+                print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
+
+            if args.activate_ioc:
+                report_id, ioc_id = args.activate_ioc.split("/", 1)
+                status = activate_ioc(cb, report_id, ioc_id)
+                status = "ACTIVE" if status else "IGNORED"
+                print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
+
         if args.intel_command == "feeds":
             if args.list_feeds:
                 feeds = get_all_feeds(cb)
@@ -625,7 +649,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             datetime.datetime.strptime(args.last_time, "%Y-%m-%d %H:%M:%S") if args.last_time else args.last_time
         )
         processes = make_process_query(
-            cb, args.query, start_time=args.start_time, last_time=args.last_time, raise_exceptions=False, validate_query=True
+            cb,
+            args.query,
+            start_time=args.start_time,
+            last_time=args.last_time,
+            raise_exceptions=False,
+            validate_query=True,
         )
 
         if args.facets:
