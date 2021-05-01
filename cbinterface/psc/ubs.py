@@ -21,6 +21,14 @@ def request_file_downloads(cb: BaseAPI, sha256hashes: List, expiration_seconds: 
     """Request file download URLs.
 
     If the UBS has a file for the sha256, it should return a URL to GET the file content.
+
+    Args:
+        cb: Carbon Black Cloud API connection with correct permissions.
+        sha256hashes: list of sha256 hashes
+        expiration_seconds: How many seconds the file content should be accessible.
+
+    Returns:
+        A dict object describing results.
     """
     url = f"/ubs/v1/orgs/{cb.credentials.org_key}/file/_download"
     request_data = {"sha256": sha256hashes, "expiration_seconds": expiration_seconds}
@@ -38,38 +46,136 @@ def request_file_downloads(cb: BaseAPI, sha256hashes: List, expiration_seconds: 
         return False
 
 
-def get_file(cb: BaseAPI, file_found_object: Dict):
-    """Get file and write content to disk."""
-    sha256 = file_found_object["sha256"]
-    file_name = f"{sha256}.zip"
-    url = file_found_object["url"]
-    LOGGER.debug(f"getting file with sha256={sha256} via URL: {url}")
-    with open(file_name, "wb") as fp:
-        result = requests.get(url, stream=True, proxies=cb.session.proxies)
-        if result.status_code == 200:
-            for chunk in result.iter_content(io.DEFAULT_BUFFER_SIZE):
-                fp.write(chunk)
-        else:
-            LOGGER.error(f"got {result.status_code} attempting file get: {result}")
-            return False
+def get_compressed_file_content(cb: BaseAPI, file_found_object: Dict):
+    """Return the zip compressed file content as a byte string.
 
-    if os.path.exists(file_name):
-        LOGGER.info(f" + Wrote: {file_name}")
-        return True
+    Args:
+        cb: Carbon Black Cloud API object
+        file_found_object: Details about the files that were found to
+          be available for download
+
+    Returns:
+        The zip compressed file content bytes.
+    """
+    sha256 = file_found_object["sha256"]
+    url = file_found_object["url"]
+    LOGGER.debug(f"getting file content for sha256={sha256} from: {url}")
+    file_content = b""
+    result = requests.get(url, stream=True, proxies=cb.session.proxies)
+    if result.status_code == 200:
+        for chunk in result.iter_content(io.DEFAULT_BUFFER_SIZE):
+            file_content += chunk
+    else:
+        LOGGER.error(f"got {result.status_code} attempting file get: {result}")
+        return False
+    return file_content
+
+
+def get_file_content(cb: BaseAPI, file_found_object: Dict):
+    """Return the file content as a byte string.
+
+    Args:
+        cb: Carbon Black Cloud API object
+        file_found_object: Details about the files that were found to
+          be available for download
+
+    Returns:
+        The file content bytes.
+    """
+    import io
+    import zipfile
+
+    compressed_content = get_compressed_file_content(cb, file_found_object)
+    if not compressed_content:
+        return compressed_content
+
+    with zipfile.ZipFile(io.BytesIO(compressed_content)) as zp:
+        if "filedata" not in zp.namelist():
+            LOGGER.error(f"unexpected UBS compressed file content: missing 'filedata'")
+            return False
+        with zp.open("filedata") as fp:
+            return fp.read()
+
+
+def request_and_get_file_content(cb: BaseAPI, sha256_hash, expiration_seconds: int = 900, compressed=True):
+    """Request and download any content for file with sha256 hash.
+
+    Args:
+        cb: Carbon Black Cloud API object
+        sha256_hash: A sha256 hash to request.
+        expiration_seconds: How many seconds the file content should be accessible.
+        compressed: If true, return zip compressed bytes; else, return bytes.
+
+    Returns:
+        The file content as a byte string.
+    """
+    file_request_results = request_file_downloads(cb, [sha256_hash])
+    for error in file_request_results["error"]:
+        LOGGER.warning(f"UBS had an 'intermittent' error and you should re-try for sha256: {error}")
+    for not_found in file_request_results["not_found"]:
+        LOGGER.warning(f"UBS did not find result for sha256: {not_found}")
+    file_found_object = file_request_results["found"][0]
+    if compressed:
+        return get_compressed_file_content(cb, file_found_object)
+    else:
+        return get_file_content(cb, file_found_object)
+
+
+def get_file(cb: BaseAPI, file_found_object: Dict, write_path=None, compressed=True):
+    """Get file and write content to disk.
+
+    Args:
+        cb: Carbon Black Cloud API object
+        file_found_object: Details about the files that were found to
+          be available for download
+        write_path: Where to write the file. Default is sha256 or sha256.zip
+        compressed: If true, write as zip file.
+
+    Returns:
+        The write_path if a file was written to disk.
+    """
+    sha256 = file_found_object["sha256"]
+    if write_path is None:
+        if compressed:
+            write_path = f"{sha256}.zip"
+        else:
+            write_path = sha256
+    LOGGER.debug(f"writing file with sha256={sha256} to: {write_path}")
+    with open(write_path, "wb") as fp:
+        if compressed:
+            fp.write(get_compressed_file_content(cb, file_found_object))
+        else:
+            fp.write(get_file_content(cb, file_found_object))
+
+    if os.path.exists(write_path):
+        LOGGER.info(f" + Wrote: {write_path}")
+        return write_path
     return None
 
 
-def request_and_get_files(cb: BaseAPI, sha256hashes: List, expiration_seconds: int = 900):
-    """Request and download files found by the sha256 list."""
+def request_and_get_files(cb: BaseAPI, sha256hashes: List, expiration_seconds: int = 900, compressed=True):
+    """Request and download zip compressed files found by the sha256 list.
+
+    Args:
+        cb: Carbon Black Cloud API object
+        sha256hashes: A list of sha256 hashes to request.
+        expiration_seconds: How many seconds the file content should be accessible.
+        compressed: If true, write as zip files.
+
+    Returns:
+        list of file paths that were written.
+    """
+    written_file_paths = []
     file_request_results = request_file_downloads(cb, sha256hashes)
     for error in file_request_results["error"]:
         LOGGER.warning(f"UBS had an 'intermittent' error and you should re-try for sha256: {error}")
     for not_found in file_request_results["not_found"]:
         LOGGER.warning(f"UBS did not find result for sha256: {not_found}")
     for file_found_object in file_request_results["found"]:
-        get_file(cb, file_found_object)
+        fpath = get_file(cb, file_found_object, compressed=compressed)
+        written_file_paths.append(fpath)
 
-    return True
+    return written_file_paths
 
 
 def yield_file_metadata(cb: BaseAPI, sha256hashes: List):
