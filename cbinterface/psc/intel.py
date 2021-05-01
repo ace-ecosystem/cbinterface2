@@ -364,9 +364,10 @@ def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
     if not report:
         return None
     for ioc in report["iocs_v2"]:
-        if ioc['id'] == ioc_id:
+        if ioc["id"] == ioc_id:
             return True
     return False
+
 
 # get IOC status
 def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=False):
