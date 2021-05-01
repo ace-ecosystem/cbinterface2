@@ -358,9 +358,23 @@ def print_report(report: Dict) -> None:
 
 
 ## IOCs ##
+def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Check if the given report contains the ioc_id."""
+    report = get_report(cb, report_id)
+    if not report:
+        return None
+    for ioc in report["iocs_v2"]:
+        if ioc['id'] == ioc_id:
+            return True
+    return False
+
 # get IOC status
-def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id):
+def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=False):
     """Return status of IOC."""
+    if check_ioc_existence:
+        if not ioc_does_exist(cb, report_id, ioc_id):
+            LOGGER.warning("IOC does not exist.")
+            return None
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
     return cb.get_object(url)["ignored"]
 
