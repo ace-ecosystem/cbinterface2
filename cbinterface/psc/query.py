@@ -195,7 +195,11 @@ def print_facet_histogram(processes: AsyncProcessQuery):
 
 
 def print_facet_histogram_v2(
-    cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+    cb: CbThreatHunterAPI,
+    query: str,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+    return_string=False,
 ):
     """Get query facet results from the CbAPI enriched events facets."""
 
@@ -233,12 +237,12 @@ def print_facet_histogram_v2(
     uri = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/facet_jobs/{job_id}/results"
     facet_data = cb.get_object(uri)
 
-    print("\n------------------------- FACET HISTOGRAMS -------------------------")
+    txt = "\n------------------------- FACET HISTOGRAMS -------------------------\n"
     total = facet_data["num_found"]
     for facets in facet_data["terms"]:
         field_name = facets["field"]
-        print(f"\n\t{field_name} results: {len(facets['values'])}")
-        print("\t--------------------------------")
+        txt += f"\n\t{field_name} results: {len(facets['values'])}\n"
+        txt += "\t--------------------------------\n"
         for entry in facets["values"]:
             entry_name = entry["name"]
             if field_name in path_fields and len(entry_name) > 55:
@@ -248,10 +252,15 @@ def print_facet_histogram_v2(
                 file_path = file_path[: 40 - len(file_name)]
                 entry_name = f"{file_path}...{file_name}"
             bar_value = int(((entry["total"] / total) * 100) / 2)
-            print(
-                "%30s: %5s %5s%% %s"
-                % (entry_name, entry["total"], int(entry["total"] / total * 100), "\u25A0" * bar_value)
+            txt += "%30s: %5s %5s%% %s\n" % (
+                entry_name,
+                entry["total"],
+                int(entry["total"] / total * 100),
+                "\u25A0" * bar_value,
             )
 
-    print()
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
     return
