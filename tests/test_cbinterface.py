@@ -8,7 +8,7 @@ HOME_PATH = os.path.dirname(os.path.abspath(__file__))
 def test_version():
     from cbinterface import __version__
 
-    assert __version__ == "2.3.15"
+    assert __version__ == "2.3.16"
 
 
 def test_timezone_settings():
