@@ -535,7 +535,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
             if args.get_ioc_status:
                 report_id, ioc_id = args.get_ioc_status.split("/", 1)
-                status = is_ioc_ignored(cb, report_id, ioc_id)
+                status = is_ioc_ignored(cb, report_id, ioc_id, check_existence=True)
                 status = "IGNORED" if status else "ACTIVE"
                 print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
 
