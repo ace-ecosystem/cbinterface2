@@ -34,8 +34,11 @@ MAX_RECURSIVE_DEPTH = CONFIG.getint("default", "max_recursive_depth")
 def save_configuration(config: ConfigParser = CONFIG, save_path=user_config_path):
     """Write config to save_path."""
     if save_path == user_config_path:
-        if not os.path.exists(user_config_path):
-            os.mkdir(os.path.join(os.path.expanduser("~"), ".carbonblack"))
+        try:
+            if not os.path.exists(user_config_path):
+                os.mkdir(os.path.join(os.path.expanduser("~"), ".carbonblack"))
+        except FileExistsError:
+            pass
     try:
         with open(save_path, "w") as fp:
             config.write(fp)
@@ -106,12 +109,12 @@ def get_playbook_map():
     """
     playbook_map = {}
     # package included playbooks
-    playbook_paths =  glob.glob(f"{HOME_PATH}/playbook_configs/*.ini")
+    playbook_paths = glob.glob(f"{HOME_PATH}/playbook_configs/*.ini")
     # configured playbooks
-    if CONFIG.has_section('playbooks'):
-        playbook_paths.extend(list(CONFIG['playbooks'].values()))
+    if CONFIG.has_section("playbooks"):
+        playbook_paths.extend(list(CONFIG["playbooks"].values()))
 
-    for playbook_path in glob.glob(f"{HOME_PATH}/playbook_configs/*.ini"):
+    for playbook_path in playbook_paths:
         playbook_name = playbook_path[playbook_path.rfind("/") + 1 : playbook_path.rfind(".")]
         playbook = ConfigParser()
         try:
@@ -122,10 +125,12 @@ def get_playbook_map():
         if playbook_name in playbook_map:
             LOGGER.error(f"playbook name collision on '{playbook_name}'. skipping this one...")
             continue
-        playbook_name = playbook.get('overview', 'name', fallback=playbook_name)
-        playbook_description = playbook.get('overview', 'description', fallback="")
-        playbook_map[playbook_name] = {'path': playbook_path,
-                                       'name': playbook_name,
-                                       'description': playbook_description}
+        playbook_name = playbook.get("overview", "name", fallback=playbook_name)
+        playbook_description = playbook.get("overview", "description", fallback="")
+        playbook_map[playbook_name] = {
+            "path": playbook_path,
+            "name": playbook_name,
+            "description": playbook_description,
+        }
 
     return playbook_map

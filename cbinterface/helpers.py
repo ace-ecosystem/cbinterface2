@@ -31,17 +31,23 @@ def is_psc_guid(guid: str):
     return PSC_GUID_REGEX.match(guid)
 
 
-def input_with_timeout(prompt, default=None, timeout=30):
+def input_with_timeout(prompt, default=None, timeout=30, stderr=True):
     """Wait up to timeout for user input"""
 
     def _log_and_exit(signum, frame):
-        sys.stderr.write("\n")
+        if stderr:
+            sys.stderr.write("\n")
+        else:
+            sys.stdout.write("\n")
         LOGGER.error("Timeout reached waiting for input.")
         sys.exit()
 
     signal.signal(signal.SIGALRM, _log_and_exit)
     signal.alarm(timeout)
-    sys.stderr.write(prompt)
+    if stderr:
+        sys.stderr.write(prompt)
+    else:
+        sys.stdout.write(prompt)
     answer = input() or default
     signal.alarm(0)
     return answer
@@ -53,7 +59,7 @@ def clean_exit(signal, frame):
     sys.exit(0)
 
 
-def get_os_independant_filepath(unknown_os_file_path: str) -> Union[PureWindowsPath, PurePosixPath]:
+def get_os_independent_filepath(unknown_os_file_path: str) -> Union[PureWindowsPath, PurePosixPath]:
     """Return a proper os filepath object."""
     filepath = PureWindowsPath(unknown_os_file_path)
     nixfilepath = PurePosixPath(unknown_os_file_path)

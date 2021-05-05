@@ -29,7 +29,7 @@ from cbinterface.config import (
     get_default_cbapi_profile,
     set_default_cbapi_profile,
     set_default_cbapi_product,
-    get_playbook_map
+    get_playbook_map,
 )
 
 # handle if cbapi not installed
@@ -38,6 +38,24 @@ from cbinterface.psc2.cli import add_psc_arguments_to_parser, execute_threathunt
 from cbinterface.scripted_live_response import write_playbook_template, write_remediation_template
 
 LOGGER = logging.getLogger("cbinterface.cli")
+
+SUPPORTED_PRODUCTS = ["response", "psc"]
+
+
+def load_configured_environments():
+    """Load Carbon Black environments from config files."""
+    # set custom attributes
+    default_profile = cbapi.auth.default_profile
+    default_profile["lr_token"] = None  # needed for psc
+
+    configured_environments = {}
+    for product in SUPPORTED_PRODUCTS:
+        configured_environments[product] = []
+        # FileCredentialStore loads `default_profile`
+        for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
+            configured_environments[product].append(profile)
+
+    return configured_environments
 
 
 def main():
@@ -51,20 +69,11 @@ def main():
     signal.signal(signal.SIGINT, clean_exit)
 
     # load carbonblack environment profiles #
-
-    # set custom attributes
-    default_profile = cbapi.auth.default_profile
-    default_profile["lr_token"] = None  # needed for psc
-
-    # locate configured environments
-    supported_products = ["response", "psc"]
+    configured_environments = load_configured_environments()
     environments = []
-    configured_products = {}
-    for product in supported_products:
-        configured_products[product] = False
-        # FileCredentialStore loads `default_profile`
-        for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
-            configured_products[product] = True
+    # create human friendly options for the CLI
+    for product, profiles in configured_environments.items():
+        for profile in profiles:
             environments.append(f"{product}:{profile}")
 
     # chose the default environment
@@ -217,13 +226,13 @@ def main():
     parser_inspect.add_argument(
         "--json", action="store_true", help="Combine all results into json document and print the result."
     )
-    #parser_inspect.add_argument(
-    #    "--segment-limit",
-    #    action="store",
-    #    type=int,
-    #    default=None,
-    #    help="stop processing events into json after this many process segments",
-    #)
+    parser_inspect.add_argument(
+        "--segment-limit",
+        action="store",
+        type=int,
+        default=None,
+        help="stop processing events into json after this many process segments",
+    )
 
     # live response parser
     parser_lr = subparsers.add_parser(
@@ -235,14 +244,14 @@ def main():
     )
     parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
     parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")
-    if configured_products["response"]:
+    if configured_environments["response"]:
         parser_lr.add_argument(
             "-i",
             "--sensor-isolation-toggle",
             action="store_true",
             help="Sensor hostname/ID to isolation/unisolate (on/off). (CB Response)",
         )
-    if configured_products["psc"]:
+    if configured_environments["psc"]:
         parser_lr.add_argument(
             "-q",
             "--quarantine",
@@ -270,12 +279,22 @@ def main():
     parser_playbook = lr_subparsers.add_parser(
         "playbook", aliases=["pb", "play"], help="Execute a live response playbook script."
     )
-    parser_playbook.add_argument("-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute.")
+    parser_playbook.add_argument(
+        "-f", "--playbook-configpath", action="store", help="Path to a playbook config file to execute."
+    )
     playbook_map = get_playbook_map()
-    playbook_names = [p['name'] for _,p in playbook_map.items()]
-    parser_playbook.add_argument("-p", "--playbook-name", action="store", choices=playbook_names, help="The name of a configured playbook to execute.")
+    playbook_names = [p["name"] for _, p in playbook_map.items()]
+    parser_playbook.add_argument(
+        "-p",
+        "--playbook-name",
+        action="store",
+        choices=playbook_names,
+        help="The name of a configured playbook to execute.",
+    )
     parser_playbook.add_argument("-l", "--list-playbooks", action="store_true", help="List configured playbooks.")
-    parser_playbook.add_argument("--write-template", action="store_true", help="write a playbook template file to use as example.")
+    parser_playbook.add_argument(
+        "--write-template", action="store_true", help="write a playbook template file to use as example."
+    )
 
     # live response collect parser
     parser_collect = lr_subparsers.add_parser("collect", help="Collect artifacts from hosts.")
@@ -302,7 +321,9 @@ def main():
     )
 
     # live response remediation parser
-    parser_remediate = lr_subparsers.add_parser("remediate", help="Perform remdiation (delete/kill) actions on device/sensor.")
+    parser_remediate = lr_subparsers.add_parser(
+        "remediate", help="Perform remdiation (delete/kill) actions on device/sensor."
+    )
     parser_remediate.add_argument(
         "-f", "--delete-file-path", action="store", help="delete the file at this path on the sensor"
     )
@@ -320,15 +341,20 @@ def main():
     # session parser - NOTE: functionality is limited on the PSC side, and it's specifically annoying that
     # we can not get a list of active psc lr sessions... or at least I haven't figure out how to do that.
     parser_session = subparsers.add_parser("session", help="Interact with Cb live response server sessions.")
-    if configured_products["response"]:
+    if configured_environments["response"]:
         parser_session.add_argument(
-            "-lss", "--list-sensor-sessions", action="store", help="list all CbLR sessions associated to this sensor ID (Response only)."
+            "-lss",
+            "--list-sensor-sessions",
+            action="store",
+            help="list all CbLR sessions associated to this sensor ID (Response only).",
         )
     parser_session.add_argument(
         "-gsc", "--get-session-command-list", action="store", help="list commands associated to this session"
     )
-    if configured_products["response"]:
-        parser_session.add_argument("-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only).")
+    if configured_environments["response"]:
+        parser_session.add_argument(
+            "-a", "--list-all-sessions", action="store_true", help="list all CbLR sessions (Response only)."
+        )
     parser_session.add_argument("-g", "--get-session", action="store", help="get live response session by id.")
     parser_session.add_argument("-c", "--close-session", action="store", help="close live response session by id.")
     parser_session.add_argument(
@@ -339,7 +365,9 @@ def main():
     )
 
     # enumeration parser
-    parser_enumeration = subparsers.add_parser("enumerate", aliases=["e"], help="Data enumerations for answering common questions.")
+    parser_enumeration = subparsers.add_parser(
+        "enumerate", aliases=["e"], help="Data enumerations for answering common questions."
+    )
     parser_enumeration.add_argument(
         "-lh",
         "--logon-history",
@@ -348,9 +376,9 @@ def main():
     )
 
     # only add independent product args if product is a configured option
-    if configured_products["response"]:
+    if configured_environments["response"]:
         add_response_arguments_to_parser(subparsers)
-    if configured_products["psc"]:
+    if configured_environments["psc"]:
         add_psc_arguments_to_parser(subparsers)
 
     argcomplete.autocomplete(parser)
@@ -376,8 +404,8 @@ def main():
     # Functionality that doesn't require a Cb connection.
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
         if args.live_response_command and (
-                args.live_response_command.startswith("play") or args.live_response_command == "pb"
-            ):
+            args.live_response_command.startswith("play") or args.live_response_command == "pb"
+        ):
             if args.list_playbooks:
                 print(f"\nConfigured Playbooks:")
                 for pb_key, pb_metadata in playbook_map.items():
@@ -398,6 +426,7 @@ def main():
 
     # Connect and execute
     product, profile = args.environment.split(":", 1)
+    LOGGER.debug(f"using '{profile}' profile via the configured '{product}' product.")
     try:
         if product == "response":
             #cb = CbResponseAPI(profile=profile)

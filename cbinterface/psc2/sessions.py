@@ -56,9 +56,12 @@ class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
 
 
 class CustomLiveResponseSessionManager(LiveResponseSessionManager):
-    def __init__(self, cb, timeout=30, custom_session_keepalive=False):
+    def __init__(self, cb, timeout=30, custom_session_keepalive=False, lr_token=None):
         # First, get a CB object with the LR API permissions
-        cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        # XXX don't need two tokens now.. TODO Fix.
+        if lr_token is None:
+            lr_token = cb.credentials.token
+        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=lr_token, org_key=cb.credentials.org_key)
         super().__init__(cblr, timeout=timeout, keepalive_sessions=False)
         # so now self._cb == cblr -- store a reference to the regular cb
         self.psc_cb = cb

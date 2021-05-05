@@ -9,7 +9,7 @@ from typing import Union
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
-#from cbapi.psc.rest_api import CbPSCBaseAPI
+# from cbapi.psc.rest_api import CbPSCBaseAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.psc.threathunter.models import AsyncProcessQuery
 
@@ -44,8 +44,50 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     return True
 
 
+def is_valid_process_query_string(cb: CbThreatHunterAPI, query: str) -> bool:
+    """
+    Validates a process query string is valid for PSC.
+
+    Args:
+        cb: Cb PSC connection object
+        query (str): The query.
+    Returns:
+        True or False
+    """
+    args = {"q": query}
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_validation"
+    validated = cb.get_object(url, query_parameters=args)
+    if not validated.get("valid"):
+        return False
+    return True
+
+
+def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
+    """
+    Converts a legacy CB Response query to a ThreatHunter query.
+
+    Args:
+        cb: Cb PSC connection object
+        query (str): The query to convert.
+    Returns:
+        str: The converted query.
+    """
+    args = {"query": query}
+    resp = cb.post_object("/threathunter/feedmgr/v2/query/translate", args)
+    if resp.status_code != 200:
+        LOGGER.error(f"got {resp.status_code} attempting query conversion")
+        return False
+    resp = resp.json()
+    return resp.get("query")
+
+
 def make_process_query(
-    cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, last_time: datetime.datetime = None
+    cb: CbThreatHunterAPI,
+    query: str,
+    start_time: datetime.datetime = None,
+    last_time: datetime.datetime = None,
+    raise_exceptions=True,
+    validate_query=False,
 ) -> AsyncProcessQuery:
     """Query the CbThreatHunterAPI environment and interface results.
 
@@ -55,6 +97,8 @@ def make_process_query(
         start_time: Set the process start time (UTC).
         last_time: Set the process last time (UTC). Only processes with a start
         time that falls before this last_time.
+        raise_exceptions: Let any exceptions raise up (library use)
+        validate_query: If True, validate the query before attempting to use it.
     Returns: AsyncProcessQuery or empty list.
     """
 
@@ -62,8 +106,17 @@ def make_process_query(
     processes = []
     try:
         processes = cb.select(Process).where(query)
-        if not is_valid_process_query(processes):
+        if validate_query and not is_valid_process_query(processes):
             LOGGER.info(f"For help, refer to {cb.url}/#userGuideLocation=search-guide/investigate-th&fullscreen")
+            LOGGER.info(f"Is this a legacy query? ... Attempting to convert to PSC query ...")
+            converted_query = convert_from_legacy_query(cb, query)
+            if not converted_query:
+                LOGGER.info(f"failed to convert to PSC query... 🤡 your query is jacked up.")
+                return []
+            if is_valid_process_query_string(cb, converted_query):
+                LOGGER.info("successfully converted and validated the query you supplied to a PSC query 👍, see below.")
+                LOGGER.info(f"👇👇 try again with the following query 👇👇 - also, hint, single quotes are your friend. ")
+                LOGGER.info(f"query: '{converted_query}'")
             return []
         if start_time or last_time:
             start_time = start_time.isoformat() if start_time else "*"
@@ -71,6 +124,8 @@ def make_process_query(
             processes = processes.where(f"process_start_time:[{start_time} TO {end_time}]")
         LOGGER.info(f"got {len(processes)} process results.")
     except Exception as e:
+        if raise_exceptions:
+            raise (e)
         LOGGER.error(f"unexpected exception: {e}")
 
     return processes
@@ -82,7 +137,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
     # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/cb-threathunter/latest/process-search-v2/#start-a-process-facet-job
     # Also, NOTE that this table lists fields that support faceting via the built in method, children is not one of them:
     # https://developer.carbonblack.com/reference/cb-threathunter/latest/process-search-fields/
-    from cbinterface.helpers import create_histogram_string, get_os_independant_filepath
+    from cbinterface.helpers import create_histogram_string, get_os_independent_filepath
 
     fields = [
         "parent_name",
@@ -105,7 +160,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                     LOGGER.info(f"condensing {value} to {value[0]}")
                 value = value[0]
             elif field_name in path_fields:
-                file_path = get_os_independant_filepath(value)
+                file_path = get_os_independent_filepath(value)
                 file_name = file_path.name
                 value = file_name
             if value not in facet_dict[field_name]:
@@ -122,7 +177,7 @@ def print_facet_histogram(processes: AsyncProcessQuery):
                 continue
             children = proc.summary.children or []
             for cp in children:
-                process_path = get_os_independant_filepath(cp.get("process_name"))
+                process_path = get_os_independent_filepath(cp.get("process_name"))
                 process_name = process_path.name
                 if process_name not in facet_dict["childproc_name"]:
                     facet_dict["childproc_name"][process_name] = 1
@@ -140,13 +195,17 @@ def print_facet_histogram(processes: AsyncProcessQuery):
 
 
 def print_facet_histogram_v2(
-    cb: CbThreatHunterAPI, query: str, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+    cb: CbThreatHunterAPI,
+    query: str,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+    return_string=False,
 ):
     """Get query facet results from the CbAPI enriched events facets."""
 
     # NOTE: no support for childproc facets with this built-in
 
-    from cbinterface.helpers import get_os_independant_filepath
+    from cbinterface.helpers import get_os_independent_filepath
 
     post_data = {}
     post_data["query"] = query
@@ -178,25 +237,30 @@ def print_facet_histogram_v2(
     uri = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/facet_jobs/{job_id}/results"
     facet_data = cb.get_object(uri)
 
-    print("\n------------------------- FACET HISTOGRAMS -------------------------")
+    txt = "\n------------------------- FACET HISTOGRAMS -------------------------\n"
     total = facet_data["num_found"]
     for facets in facet_data["terms"]:
         field_name = facets["field"]
-        print(f"\n\t{field_name} results: {len(facets['values'])}")
-        print("\t--------------------------------")
+        txt += f"\n\t{field_name} results: {len(facets['values'])}\n"
+        txt += "\t--------------------------------\n"
         for entry in facets["values"]:
             entry_name = entry["name"]
             if field_name in path_fields and len(entry_name) > 55:
-                file_path = get_os_independant_filepath(entry_name)
+                file_path = get_os_independent_filepath(entry_name)
                 file_name = file_path.name
                 file_path = entry_name[: len(entry_name) - len(file_name)]
                 file_path = file_path[: 40 - len(file_name)]
                 entry_name = f"{file_path}...{file_name}"
             bar_value = int(((entry["total"] / total) * 100) / 2)
-            print(
-                "%30s: %5s %5s%% %s"
-                % (entry_name, entry["total"], int(entry["total"] / total * 100), "\u25A0" * bar_value)
+            txt += "%30s: %5s %5s%% %s\n" % (
+                entry_name,
+                entry["total"],
+                int(entry["total"] / total * 100),
+                "\u25A0" * bar_value,
             )
 
-    print()
+    txt += "\n"
+    if return_string:
+        return txt
+    print(txt)
     return

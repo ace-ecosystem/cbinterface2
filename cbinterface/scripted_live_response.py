@@ -16,17 +16,17 @@ from cbapi.psc import Device
 from cbapi.psc.devices_query import DeviceSearchQuery
 from cbapi.live_response_api import CbLRManagerBase
 
-from cbinterface.helpers import get_os_independant_filepath, input_with_timeout
+from cbinterface.helpers import get_os_independent_filepath, input_with_timeout
 
 # XXX Make playbooks support all commands?
 
 from cbinterface.commands import (
-    PutFile, # Playbook
+    PutFile,  # Playbook
     ProcessListing,
-    GetFile, # Playbook
+    GetFile,  # Playbook
     ListRegKeyValues,
     RegKeyValue,
-    ExecuteCommand, # Playbook
+    ExecuteCommand,  # Playbook
     ListDirectory,
     WalkDirectory,
     LogicalDrives,
@@ -61,31 +61,44 @@ OPTIONAL_OP_KEY_MAP = {'RUN': ['async_run', 'write_results_path', 'print_results
 """
 
 # live response scripts - order is important, ordered impacts execution.
-SUPPORTED_LR_SCRIPT_KEYS = ['pids', 'process_names', 'services', 'scheduled_tasks', 'registry_values', 'registry_keys', 'files', 'directories']
+SUPPORTED_LR_SCRIPT_KEYS = [
+    "pids",
+    "process_names",
+    "services",
+    "scheduled_tasks",
+    "registry_values",
+    "registry_keys",
+    "files",
+    "directories",
+]
 
-LR_REMEDIATION_MAP = {'pids': KillProcessByID,
-                      'process_names': KillProcessByName,
-                      'services': "playbook_configs/delete_service.ini",
-                      'scheduled_tasks': "playbook_configs/delete_scheduled_task.ini",
-                      'registry_values': DeleteRegistryKeyValue,
-                      'registry_keys': DeleteRegistryKey,
-                      'files': DeleteFile,
-                      'directories': "playbook_configs/delete_directory.ini",
-                      }
+LR_REMEDIATION_MAP = {
+    "pids": KillProcessByID,
+    "process_names": KillProcessByName,
+    "services": "playbook_configs/delete_service.ini",
+    "scheduled_tasks": "playbook_configs/delete_scheduled_task.ini",
+    "registry_values": DeleteRegistryKeyValue,
+    "registry_keys": DeleteRegistryKey,
+    "files": DeleteFile,
+    "directories": "playbook_configs/delete_directory.ini",
+}
 
 # Get the working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Playbook section begins #
 
-PLAYBOOK_TEMPLATE_PATH=os.path.join(BASE_DIR, 'templates/playbook.ini')
+PLAYBOOK_TEMPLATE_PATH = os.path.join(BASE_DIR, "templates/playbook.ini")
+
 
 def write_playbook_template(template_path=PLAYBOOK_TEMPLATE_PATH):
     """Write the example template to the current working dir."""
     from shutil import copyfile
-    destination = template_path[template_path.rfind("/")+1:]
+
+    destination = template_path[template_path.rfind("/") + 1 :]
     copyfile(template_path, destination)
     return destination
+
 
 def playbook_missing_required_keys(config, KEYS):
     """Return True if a playbook is missing required keys."""
@@ -179,8 +192,12 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
     cleanup_commands = []
     playbook_commands = [cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS]
     if separate_cleanup:
-        playbook_commands = [cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS and not cmd.startswith("cleanup")]
-        cleanup_commands = [cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS and cmd.startswith("cleanup")]
+        playbook_commands = [
+            cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS and not cmd.startswith("cleanup")
+        ]
+        cleanup_commands = [
+            cmd for cmd in playbook.sections() if cmd not in IGNORED_SECTIONS and cmd.startswith("cleanup")
+        ]
 
     # make sure requirements are met first
     for command in playbook_commands:
@@ -217,7 +234,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                 print_results=print_results,
                 write_results_path=write_results_path,
                 placeholders=placeholders,
-                post_completion_command=post_completion_command
+                post_completion_command=post_completion_command,
             )
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
@@ -233,9 +250,14 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                     LOGGER.error(f"Not found: '{original_fp}' OR '{file_path}'")
                     return False
 
-            file_name = get_os_independant_filepath(file_path).name
+            file_name = get_os_independent_filepath(file_path).name
 
-            cmd = PutFile(file_path, sensor_write_filepath=client_file_path, placeholders=placeholders, post_completion_command=post_completion_command)
+            cmd = PutFile(
+                file_path,
+                sensor_write_filepath=client_file_path,
+                placeholders=placeholders,
+                post_completion_command=post_completion_command,
+            )
             cmd.description = f"Put '{file_name}' on device @ '{client_file_path}'"
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
@@ -243,7 +265,12 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
         elif op == "UPLOAD" or op == "GET":
             path = playbook[command]["path"]
             write_results_path = playbook[command].get("write_results_path", None)
-            cmd = GetFile(path, output_filename=write_results_path, placeholders=placeholders, post_completion_command=post_completion_command)
+            cmd = GetFile(
+                path,
+                output_filename=write_results_path,
+                placeholders=placeholders,
+                post_completion_command=post_completion_command,
+            )
             LOGGER.debug(f"built {cmd}")
             ready_live_response_commands.append(cmd)
 
@@ -275,7 +302,7 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
                     wait_for_completion=wait_for_completion,
                     print_results=print_results,
                     write_results_path=write_results_path,
-                    placeholders = placeholders
+                    placeholders=placeholders,
                 )
                 LOGGER.debug(f"built {cmd}")
                 ready_live_response_commands.append(cmd)
@@ -284,16 +311,20 @@ def build_playbook_commands(playbook_path, placeholders={}, separate_cleanup=Fal
 
     return ready_live_response_commands
 
+
 # Remediation section begins #
 
-REMEDIATION_TEMPLATE_PATH=os.path.join(BASE_DIR, 'templates/remediate.ini')
+REMEDIATION_TEMPLATE_PATH = os.path.join(BASE_DIR, "templates/remediate.ini")
+
 
 def write_remediation_template(template_path=REMEDIATION_TEMPLATE_PATH):
     """Write the example template to the current working dir."""
     from shutil import copyfile
-    destination = template_path[template_path.rfind("/")+1:]
+
+    destination = template_path[template_path.rfind("/") + 1 :]
     copyfile(template_path, destination)
     return destination
+
 
 def load_live_response_script(remediation_script_path):
     """Load live response script config from path."""
@@ -301,7 +332,9 @@ def load_live_response_script(remediation_script_path):
     if not os.path.exists(remediation_script_path):
         remediation_script_path = os.path.join(BASE_DIR, remediation_script_path)
     if not os.path.exists(remediation_script_path):
-        script_name = remediation_script_path[remediation_script_path.rfind("/") + 1 : remediation_script_path.rfind(".")]
+        script_name = remediation_script_path[
+            remediation_script_path.rfind("/") + 1 : remediation_script_path.rfind(".")
+        ]
         LOGGER.error(f"Path to '{script_name}' script does not exist: {remediation_script_path}")
         return False
     LOGGER.debug(f"loading script path: {remediation_script_path}")
@@ -311,6 +344,7 @@ def load_live_response_script(remediation_script_path):
         LOGGER.error("ConfigParser Error reading '{remediation_script_path}' : {e}")
         return False
     return script
+
 
 def build_remediation_commands(remediation_script_path):
     """Return Live Response Session Commands described by this script."""
@@ -328,26 +362,30 @@ def build_remediation_commands(remediation_script_path):
     script = load_live_response_script(remediation_script_path)
     if not script:
         return False
-    
+
     cleanup_commands = []
     remediation_commands = []
 
     for remediation_type in SUPPORTED_LR_SCRIPT_KEYS:
         remediation_function_or_play = LR_REMEDIATION_MAP[remediation_type]
-        
+
         if script.has_section(remediation_type):
             for remediation_key, remediation_item in script[remediation_type].items():
                 if remediation_function_or_play is NotImplemented:
                     LOGGER.warning(f"{remediation_type} remediation is NotImplemented yet.")
                     continue
-                elif isinstance(remediation_function_or_play, str) and remediation_function_or_play.startswith("playbook"):
+                elif isinstance(remediation_function_or_play, str) and remediation_function_or_play.startswith(
+                    "playbook"
+                ):
                     playbook = load_playbook(remediation_function_or_play)
                     if not playbook:
                         continue
-                    placeholder_argument_name = playbook.get("overview", "required_arguments", fallback="").split(',')[0]
+                    placeholder_argument_name = playbook.get("overview", "required_arguments", fallback="").split(",")[
+                        0
+                    ]
                     if not placeholder_argument_name:
                         continue
-                    placeholders={placeholder_argument_name: remediation_item}
+                    placeholders = {placeholder_argument_name: remediation_item}
                     cmds = build_playbook_commands(remediation_function_or_play, placeholders=placeholders)
                     remediation_commands.extend(cmds)
                 else:

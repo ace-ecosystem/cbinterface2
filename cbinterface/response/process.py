@@ -23,7 +23,7 @@ def process_to_dict(p: Process, max_segments=None) -> Dict:
 
     all_segments = p.get_segments()
     if max_segments is None:
-        mex_segments = len(all_segments)
+        max_segments = len(all_segments)
 
     p.refresh()
     results = p.original_document
@@ -40,16 +40,22 @@ def process_to_dict(p: Process, max_segments=None) -> Dict:
         print_process_tree(p)
     results["process_tree"] = results["process_tree"].getvalue()
 
+    captured_segment_count = 0
     if p.current_segment:
         # if current_segment is set, something specifically targeted this segment
         # and we will ensure it gets captured here
         results["captured_segments"][p.current_segment] = segment_events_to_dict(p)
+        captured_segment_count += 1
 
     for segment in all_segments:
         p.current_segment = segment
         if segment in results["captured_segments"]:
             continue
+        if captured_segment_count >= max_segments:
+            LOGGER.info(f"hit maximum segment limit exporting process to json for {p.id}")
+            break
         results["captured_segments"][segment] = segment_events_to_dict(p)
+        captured_segment_count += 1
 
     return results
 
