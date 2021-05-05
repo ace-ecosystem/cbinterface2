@@ -334,6 +334,15 @@ def interactively_update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_
     """Prompt user for new query and update the report IOC query."""
     from cbinterface.helpers import input_with_timeout
 
+    report = get_report(cb, report_id)
+    if not report:
+        return None
+
+    ioc = [ioc for ioc in report["iocs_v2"] if ioc_id == ioc['id']][0]
+    if ioc['match_type'] != "query":
+        LOGGER.warning(f"IOC={ioc_id} is not a query based IOC: {ioc}")
+
+    print(f"Current IOC query: {ioc['values'][0]}")
     new_ioc_query = input_with_timeout("Enter new query: ", timeout=90)
     return update_report_ioc_query(cb, report_id, ioc_id, new_ioc_query)
 
