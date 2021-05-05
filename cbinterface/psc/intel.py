@@ -381,7 +381,7 @@ def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
 # get IOC status
 def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=False):
     """Return status of IOC."""
-    if check_ioc_existence:
+    if check_existence:
         if not ioc_does_exist(cb, report_id, ioc_id):
             LOGGER.warning("IOC does not exist.")
             return None
