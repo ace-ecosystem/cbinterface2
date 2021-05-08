@@ -130,7 +130,7 @@ def request_and_get_file(
     for error in file_request_results["error"]:
         LOGGER.warning(f"UBS had an 'intermittent' error and you should re-try for sha256: {error}")
     for not_found in file_request_results["not_found"]:
-        LOGGER.warning(f"UBS did not find result for sha256: {not_found}")
+        LOGGER.info(f"UBS did not find result for sha256: {not_found}")
     file_found_object = file_request_results["found"][0]
     if return_bytes:
         if write_path:
@@ -156,7 +156,7 @@ def request_and_get_files(cb: BaseAPI, sha256hashes: List, expiration_seconds: i
     for error in file_request_results["error"]:
         LOGGER.warning(f"UBS had an 'intermittent' error and you should re-try for sha256: {error}")
     for not_found in file_request_results["not_found"]:
-        LOGGER.warning(f"UBS did not find result for sha256: {not_found}")
+        LOGGER.info(f"UBS did not find result for sha256: {not_found}")
     for file_found_object in file_request_results["found"]:
         fpath = get_file(cb, file_found_object, compressed=compressed)
         written_file_paths.append(fpath)
@@ -172,7 +172,7 @@ def yield_file_metadata(cb: BaseAPI, sha256hashes: List):
             yield cb.get_object(f"{url}/{sha256}/metadata")
         except ObjectNotFoundError as e:
             err_message = json.loads(e.message)
-            LOGGER.warning(f"UBS: {err_message['error_code']}: {err_message['message']}")
+            LOGGER.info(f"UBS: {err_message['error_code']}: {err_message['message']}")
         except ServerError as e:
             LOGGER.error(f"Caught ServerError: {e}")
         except ClientError as e:
@@ -195,7 +195,7 @@ def yield_device_summary(cb: BaseAPI, sha256hashes: List):
             yield cb.get_object(f"{url}/{sha256}/summary/device")
         except ObjectNotFoundError as e:
             err_message = json.loads(e.message)
-            LOGGER.warning(f"UBS: {err_message['error_code']}: {err_message['message']}")
+            LOGGER.info(f"UBS: {err_message['error_code']}: {err_message['message']}")
         except ServerError as e:
             LOGGER.error(f"Caught ServerError: {e}")
         except ClientError as e:
@@ -235,7 +235,7 @@ def yield_signature_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
             yield cb.get_object(f"{url}/{sha256}/summary/signature?rows={rows}")
         except ObjectNotFoundError as e:
             err_message = json.loads(e.message)
-            LOGGER.warning(f"UBS: {err_message['error_code']}: {err_message['message']}")
+            LOGGER.info(f"UBS: {err_message['error_code']}: {err_message['message']}")
         except ServerError as e:
             LOGGER.error(f"Caught ServerError: {e}")
         except ClientError as e:
@@ -263,7 +263,7 @@ def yield_file_path_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
             yield cb.get_object(f"{url}/{sha256}/summary/file_path?rows={rows}")
         except ObjectNotFoundError as e:
             err_message = json.loads(e.message)
-            LOGGER.warning(f"UBS: {err_message['error_code']}: {err_message['message']}")
+            LOGGER.info(f"UBS: {err_message['error_code']}: {err_message['message']}")
         except ServerError as e:
             LOGGER.error(f"Caught ServerError: {e}")
         except ClientError as e:
@@ -290,11 +290,15 @@ def consolidate_metadata_and_summaries(cb: BaseAPI, sha256hashes: List):
     """
     results = []
     for sha256 in sha256hashes:
-        sha256_data = {}
-        sha256_data["sha256"] = sha256
+        sha256_data = {"sha256": sha256,
+                       "metadata": [],
+                       "device_sumamry": [],
+                       "signature_summary": [],
+                       "file_path_summary": []}
         sha256_data["metadata"] = get_file_metadata(cb, [sha256])
-        sha256_data["device_summary"] = get_device_summary(cb, [sha256])
-        sha256_data["signature_summary"] = get_signature_summary(cb, [sha256])
-        sha256_data["file_path_summary"] = get_file_path_summary(cb, [sha256])
+        if sha256_data["metadata"]:
+            sha256_data["device_summary"] = get_device_summary(cb, [sha256])
+            sha256_data["signature_summary"] = get_signature_summary(cb, [sha256])
+            sha256_data["file_path_summary"] = get_file_path_summary(cb, [sha256])
         results.append(sha256_data)
     return results
