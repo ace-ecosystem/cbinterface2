@@ -210,12 +210,14 @@ def get_events_by_type(p: Union[Process, Dict], event_type: str):
 
     # we only load the process here to check for the presence of event_types
     # only make event api calls for processes that report having those events
+    """# XXX - UPDATE - NOTE: These processes LIE; sometimes procs say they don't have events when they do.
     if not is_process_loaded(p):
         p = load_process(p)
     event_count = p.get(f"{event_type}_count")
     if event_count is not None and event_count == 0:
         LOGGER.debug(f"processes reports not having any events of type: {event_type}")
         return []
+    """
     try:
         return p.events(event_type=event_type)
     except Exception as e:
