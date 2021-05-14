@@ -334,6 +334,15 @@ def interactively_update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_
     """Prompt user for new query and update the report IOC query."""
     from cbinterface.helpers import input_with_timeout
 
+    report = get_report(cb, report_id)
+    if not report:
+        return None
+
+    ioc = [ioc for ioc in report["iocs_v2"] if ioc_id == ioc['id']][0]
+    if ioc['match_type'] != "query":
+        LOGGER.warning(f"IOC={ioc_id} is not a query based IOC: {ioc}")
+
+    print(f"Current IOC query: {ioc['values'][0]}")
     new_ioc_query = input_with_timeout("Enter new query: ", timeout=90)
     return update_report_ioc_query(cb, report_id, ioc_id, new_ioc_query)
 
@@ -353,15 +362,49 @@ def print_report(report: Dict) -> None:
             print(f"\t\t{field}: {value}")
         for ioc_value in ioc["values"]:
             print(f"\t\tioc_value: {ioc_value}")
+        print()
     print()
 
 
 ## IOCs ##
+def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Check if the given report contains the ioc_id."""
+    report = get_report(cb, report_id)
+    if not report:
+        return None
+    for ioc in report["iocs_v2"]:
+        if ioc["id"] == ioc_id:
+            return True
+    return False
+
+
 # get IOC status
+def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=False):
+    """Return status of IOC."""
+    if check_existence:
+        if not ioc_does_exist(cb, report_id, ioc_id):
+            LOGGER.warning("IOC does not exist.")
+            return None
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    return cb.get_object(url)["ignored"]
+
 
 # ignore IOC
+def ignore_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Ignore this IOC."""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    return cb.put_object(url, {"ignore": True})
+
 
 # activate IOC
+def activate_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+    """Activate IOC."""
+    url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
+    resp = cb.delete_object(url)
+    if resp.status_code == 204:
+        return True
+    return False
+
 
 ## Watchlists ##
 def get_all_watchlists(cb: CbThreatHunterAPI):
@@ -411,7 +454,7 @@ def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
 
 
 def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
-    watchlist_id = watchlist_data['id']
+    watchlist_id = watchlist_data["id"]
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
     try:
         result = cb.put_object(url, watchlist_data)
