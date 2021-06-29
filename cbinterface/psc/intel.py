@@ -526,6 +526,50 @@ def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report
 
     return watchlist_data
 
+def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report_data: Dict) -> Dict:
+    """Create a new threat report from JSON and append to watchlist.
+
+    report_data = {
+        "title": wl_data.get("name"),
+        "description": report_description,
+        "timestamp": time.time(),
+        "severity": 5,
+        "tags": report_tags,
+        "iocs_v2": [ioc_data],
+    }
+    """
+    watchlist_data = get_watchlist(cb, watchlist_id)
+    if not watchlist_data:
+        LOGGER.error(f"watchlist does not exist: {watchlist_id}")
+        return False
+    watchlist_threat_reports_before = len(watchlist_data["report_ids"])
+
+    if "report" in report_data:
+        report_data = report_data["report"]
+
+    # create intel report
+    report = {"title": report_data["title"], # required
+              "description": report_data["description"], # required
+              "timestamp": time.time(),
+              "severity": report_data.get("severity", 5),
+              "link": report_data.get("link", None),
+              "tags": report_data.get("tags", []),
+              "iocs_v2": report_data["iocs_v2"], # required
+    }
+    intel_report = create_report(cb, report)
+    if not isinstance(intel_report, dict):
+        LOGGER.error(f"problem creating report for {report_data}")
+        return False
+    LOGGER.info(f"created intel report: {intel_report}")
+
+    # append intel report to Watchlist.
+    watchlist_data["report_ids"].append(intel_report["id"])
+    watchlist_data = update_watchlist(cb, watchlist_data)
+    if watchlist_data and len(watchlist_data["report_ids"]) == (watchlist_threat_reports_before+1):
+        LOGGER.info(f"successfully appended new threat report to watchlist.")
+        return True
+    return False
+
 
 # TODO enable watchlist alerting/taging?
 

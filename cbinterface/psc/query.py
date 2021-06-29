@@ -1,20 +1,137 @@
 """Functions that work with query related Carbon Black APIs.
 """
 
+import time
 import datetime
 import logging
 from dateutil import tz
 
-from typing import Union
+from typing import Union, Dict, List
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
 # from cbapi.psc.rest_api import CbPSCBaseAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 from cbapi.psc.threathunter.models import AsyncProcessQuery
+from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.query")
 
+
+def create_event_search(
+    p: Process,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    query: str = None,
+    rows=40,
+    sort: List[Dict] = [{"field": "device_timestamp", "order": "asc"}],
+    start: int = 0,
+) -> Dict:
+    #url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs"
+    url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
+    if not search_data:
+        search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
+    try:
+        print(search_data)
+        result = p._cb.post_object(url, search_data)
+        return result.json()
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError searching alerts: {e}")
+        return False
+    except ClientError as e:
+        LOGGER.warning(f"got ClientError searching alerts: {e}")
+        return False
+    except ValueError:
+        LOGGER.warning(f"got unexpected {result}")
+        return False
+
+def event_search_complete(cb: CbThreatHunterAPI, job_id):
+    """Return true when a search is complete."""
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/enriched_events/search_jobs/{job_id}"
+    result = cb.get_object(url)
+    if result["completed"] == result["contacted"]:
+        return True
+    return False
+
+def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
+    """Return any results of an event search."""
+    url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs/{job_id}/results"
+    try:
+        while not event_search_complete(cb, job_id):
+            time.sleep(0.1)
+    except Exception as e:
+        LOGGER.error(f"got exception waiting for event search to complete: {e}")
+        return None
+    try:
+        return cb.get_object(url)
+    except Exception as e:
+        LOGGER.error("could not get results: {e}")
+        return None
+
+def yield_events(
+    cb: CbThreatHunterAPI,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    query: str = None,
+    rows=40,
+    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    start: int = 0,
+    workflow_state=["OPEN", "DISMISSED"],
+    max_results: int = None,  # limit results returned
+) -> Dict:
+    """Yield Alerts resulting from alert search."""
+    # create the search
+    result = create_event_search(
+            cb,
+            search_data=search_data,
+            criteria=criteria,
+            query=query,
+            rows=rows,
+            sort=sort,
+            start=start,
+            workflow_state=workflow_state,
+        )
+    if not result:
+        return result
+    job_id = result["job_id"]
+    position = start
+    still_querying = True
+    while still_querying:
+        if max_results and position + rows > max_results:
+            # get however many rows that may result in max_results
+            rows = max_results - position
+        # get the results
+        result = get_event_search_results(cb, job_id)
+        if not result:
+            return result
+        total_results = result["num_found"]
+        results = result.get("results", [])
+        LOGGER.debug(f"got {len(results)+position} out of {total_results} total alerts.")
+        for item in results:
+            yield item
+            position += 1
+            if max_results and position >= max_results:
+                still_querying = False
+                break
+        if position >= total_results:
+            still_querying = False
+            break
+
+def get_process_search_jobs(cb):
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs"
+    return cb.get_object(url)
+
+def get_process_search_status(cb, job_id):
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}"
+    return cb.get_object(url)
+
+def get_process_search_results(cb, job_id):
+    url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}/results"
+    return cb.get_object(url)
+
+def cancel_process_search(cb, job_id):
+    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}"
+    return cb.delete_object(url)
 
 def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     """Custom query validation.
