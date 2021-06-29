@@ -266,9 +266,15 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
 
     # create new threat reports for watchlists
     parser_intel_watchlists_subparsers = parser_intel_watchlists.add_subparsers(dest="intel_watchlist_command")
-    parser_intel_watchlist_creation = parser_intel_watchlists_subparsers.add_parser("new", help="Create new Threat Report for a Watchlist.")
-    parser_intel_watchlist_creation.add_argument('report_path', action='store', help="Path to JSON representation of new Threat Report.")
-    parser_intel_watchlist_creation.add_argument('-w', '--watchlist-id', required=True, action='store', help='The ID of a watchlist to append to.')
+    parser_intel_watchlist_creation = parser_intel_watchlists_subparsers.add_parser(
+        "new", help="Create new Threat Report for a Watchlist."
+    )
+    parser_intel_watchlist_creation.add_argument(
+        "report_path", action="store", help="Path to JSON representation of new Threat Report."
+    )
+    parser_intel_watchlist_creation.add_argument(
+        "-w", "--watchlist-id", required=True, action="store", help="The ID of a watchlist to append to."
+    )
 
     # intel feeds
     parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
@@ -502,7 +508,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if not os.path.exists(args.report_path):
                     LOGGER.error(f"{args.report_path} does not exist.")
                     return False
-                with open(args.report_path, 'r') as fp:
+                with open(args.report_path, "r") as fp:
                     report_data = json.load(fp)
                 if not report_data:
                     LOGGER.error(f"failed to load report data")

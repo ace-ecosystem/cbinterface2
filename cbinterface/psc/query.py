@@ -27,7 +27,7 @@ def create_event_search(
     sort: List[Dict] = [{"field": "device_timestamp", "order": "asc"}],
     start: int = 0,
 ) -> Dict:
-    #url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs"
+    # url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs"
     url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
     if not search_data:
         search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
@@ -45,6 +45,7 @@ def create_event_search(
         LOGGER.warning(f"got unexpected {result}")
         return False
 
+
 def event_search_complete(cb: CbThreatHunterAPI, job_id):
     """Return true when a search is complete."""
     url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/enriched_events/search_jobs/{job_id}"
@@ -52,6 +53,7 @@ def event_search_complete(cb: CbThreatHunterAPI, job_id):
     if result["completed"] == result["contacted"]:
         return True
     return False
+
 
 def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
     """Return any results of an event search."""
@@ -68,6 +70,7 @@ def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
         LOGGER.error("could not get results: {e}")
         return None
 
+
 def yield_events(
     cb: CbThreatHunterAPI,
     search_data: Dict = {},
@@ -82,15 +85,15 @@ def yield_events(
     """Yield Alerts resulting from alert search."""
     # create the search
     result = create_event_search(
-            cb,
-            search_data=search_data,
-            criteria=criteria,
-            query=query,
-            rows=rows,
-            sort=sort,
-            start=start,
-            workflow_state=workflow_state,
-        )
+        cb,
+        search_data=search_data,
+        criteria=criteria,
+        query=query,
+        rows=rows,
+        sort=sort,
+        start=start,
+        workflow_state=workflow_state,
+    )
     if not result:
         return result
     job_id = result["job_id"]
@@ -117,21 +120,26 @@ def yield_events(
             still_querying = False
             break
 
+
 def get_process_search_jobs(cb):
     url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs"
     return cb.get_object(url)
+
 
 def get_process_search_status(cb, job_id):
     url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}"
     return cb.get_object(url)
 
+
 def get_process_search_results(cb, job_id):
     url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}/results"
     return cb.get_object(url)
 
+
 def cancel_process_search(cb, job_id):
     url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_jobs/{job_id}"
     return cb.delete_object(url)
+
 
 def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     """Custom query validation.
