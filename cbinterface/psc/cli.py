@@ -52,6 +52,7 @@ from cbinterface.psc.intel import (
     ignore_ioc,
     activate_ioc,
     create_new_report_and_append_to_watchlist,
+    write_basic_report_template,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -254,6 +255,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
     parser_intel_watchlists.add_argument(
         "-dr", "--delete-watchlist-report", action="store", help="Delete watchlist report by ID."
+    )
+    parser_intel_watchlists.add_argument(
+        "-wt", "--write-basic-threat-report-template", action="store_true", help="Write a basic singel query IOC threat report template."
     )
     parser_intel_watchlists.add_argument(
         "--update-ioc-query",
@@ -517,6 +521,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if watchlist_data:
                     LOGGER.info(f"successfully appended new threat report to watchlist.")
                 return True
+
+            if args.write_basic_threat_report_template:
+                result = write_basic_report_template()
+                if result:
+                    LOGGER.info(f"wrote: {result}")
+                return result
 
             if args.list_watchlists:
                 watchlists = get_all_watchlists(cb)
