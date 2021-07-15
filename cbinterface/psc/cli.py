@@ -257,7 +257,10 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "-dr", "--delete-watchlist-report", action="store", help="Delete watchlist report by ID."
     )
     parser_intel_watchlists.add_argument(
-        "-wt", "--write-basic-threat-report-template", action="store_true", help="Write a basic singel query IOC threat report template."
+        "-wt",
+        "--write-basic-threat-report-template",
+        action="store_true",
+        help="Write a basic singel query IOC threat report template.",
     )
     parser_intel_watchlists.add_argument(
         "--update-ioc-query",

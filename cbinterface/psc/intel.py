@@ -309,15 +309,13 @@ def update_report(cb: CbThreatHunterAPI, report_id, report_data) -> Dict:
 
     return result.json()
 
+
 def write_basic_report_template() -> bool:
     """Print a basic report template.
-    
+
     The template can be filled out to create a new threat report.
     """
-    ioc2_template = {"id": 1,
-                     "match_type": "query",
-                     "values": ["query_string_here"]
-                    }
+    ioc2_template = {"id": 1, "match_type": "query", "values": ["query_string_here"]}
     report_template = {
         "title": None,
         "description": None,  # required
@@ -332,6 +330,7 @@ def write_basic_report_template() -> bool:
     if os.path.exists(template_name):
         return template_name
     return False
+
 
 def update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id, ioc_query_string) -> Dict:
     """Update IOC query value with ioc_query_string.
@@ -552,8 +551,7 @@ def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report
 
 
 def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report_data: Dict) -> Dict:
-    """Create a new threat report from JSON and append to watchlist.
-    """
+    """Create a new threat report from JSON and append to watchlist."""
     watchlist_data = get_watchlist(cb, watchlist_id)
     if not watchlist_data:
         LOGGER.error(f"watchlist does not exist: {watchlist_id}")
