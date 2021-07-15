@@ -33,6 +33,7 @@ NOTE on Response Watchlist to PSC EDR Intel Migrations:
      had a hit and then the ones remaining are lower fidelity and went into a "Low Fidelity" PSC EDR Watchlist.
         
 """
+import os
 import json
 import time
 import logging
@@ -309,6 +310,28 @@ def update_report(cb: CbThreatHunterAPI, report_id, report_data) -> Dict:
     return result.json()
 
 
+def write_basic_report_template() -> bool:
+    """Print a basic report template.
+
+    The template can be filled out to create a new threat report.
+    """
+    ioc2_template = {"id": 1, "match_type": "query", "values": ["query_string_here"]}
+    report_template = {
+        "title": None,
+        "description": None,  # required
+        "severity": None,
+        "link": None,
+        "tags": [],
+        "iocs_v2": [ioc2_template],  # required
+    }
+    template_name = "basic.threat_report.single_ioc_query.template.json"
+    with open(template_name, "w") as fp:
+        fp.write(json.dumps(report_template, indent=2))
+    if os.path.exists(template_name):
+        return template_name
+    return False
+
+
 def update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id, ioc_query_string) -> Dict:
     """Update IOC query value with ioc_query_string.
 
@@ -338,8 +361,8 @@ def interactively_update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_
     if not report:
         return None
 
-    ioc = [ioc for ioc in report["iocs_v2"] if ioc_id == ioc['id']][0]
-    if ioc['match_type'] != "query":
+    ioc = [ioc for ioc in report["iocs_v2"] if ioc_id == ioc["id"]][0]
+    if ioc["match_type"] != "query":
         LOGGER.warning(f"IOC={ioc_id} is not a query based IOC: {ioc}")
 
     print(f"Current IOC query: {ioc['values'][0]}")
@@ -525,6 +548,42 @@ def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report
         return False
 
     return watchlist_data
+
+
+def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report_data: Dict) -> Dict:
+    """Create a new threat report from JSON and append to watchlist."""
+    watchlist_data = get_watchlist(cb, watchlist_id)
+    if not watchlist_data:
+        LOGGER.error(f"watchlist does not exist: {watchlist_id}")
+        return False
+    watchlist_threat_reports_before = len(watchlist_data["report_ids"])
+
+    if "report" in report_data:
+        report_data = report_data["report"]
+
+    # create intel report
+    report = {
+        "title": report_data["title"],  # required
+        "description": report_data["description"],  # required
+        "timestamp": time.time(),
+        "severity": report_data.get("severity", 5),
+        "link": report_data.get("link", None),
+        "tags": report_data.get("tags", []),
+        "iocs_v2": report_data["iocs_v2"],  # required
+    }
+    intel_report = create_report(cb, report)
+    if not isinstance(intel_report, dict):
+        LOGGER.error(f"problem creating report for {report_data}")
+        return False
+    LOGGER.info(f"created intel report: {intel_report}")
+
+    # append intel report to Watchlist.
+    watchlist_data["report_ids"].append(intel_report["id"])
+    watchlist_data = update_watchlist(cb, watchlist_data)
+    if watchlist_data and len(watchlist_data["report_ids"]) == (watchlist_threat_reports_before + 1):
+        LOGGER.info(f"successfully appended new threat report to watchlist.")
+        return True
+    return False
 
 
 # TODO enable watchlist alerting/taging?

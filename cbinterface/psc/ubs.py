@@ -290,11 +290,13 @@ def consolidate_metadata_and_summaries(cb: BaseAPI, sha256hashes: List):
     """
     results = []
     for sha256 in sha256hashes:
-        sha256_data = {"sha256": sha256,
-                       "metadata": [],
-                       "device_sumamry": [],
-                       "signature_summary": [],
-                       "file_path_summary": []}
+        sha256_data = {
+            "sha256": sha256,
+            "metadata": [],
+            "device_sumamry": [],
+            "signature_summary": [],
+            "file_path_summary": [],
+        }
         sha256_data["metadata"] = get_file_metadata(cb, [sha256])
         if sha256_data["metadata"]:
             sha256_data["device_summary"] = get_device_summary(cb, [sha256])

@@ -51,6 +51,8 @@ from cbinterface.psc.intel import (
     is_ioc_ignored,
     ignore_ioc,
     activate_ioc,
+    create_new_report_and_append_to_watchlist,
+    write_basic_report_template,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -255,6 +257,12 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "-dr", "--delete-watchlist-report", action="store", help="Delete watchlist report by ID."
     )
     parser_intel_watchlists.add_argument(
+        "-wt",
+        "--write-basic-threat-report-template",
+        action="store_true",
+        help="Write a basic singel query IOC threat report template.",
+    )
+    parser_intel_watchlists.add_argument(
         "--update-ioc-query",
         action="store",
         help="Update a query IOC for the given report ID/IOC id. format: report_id/ioc_id",
@@ -262,6 +270,18 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_watchlists.add_argument("--get-ioc-status", action="store", help="Get active/ignore status of an IOC.")
     parser_intel_watchlists.add_argument("--ignore-ioc", action="store", help="Ignore IOC.")
     parser_intel_watchlists.add_argument("--activate-ioc", action="store", help="Activate IOC.")
+
+    # create new threat reports for watchlists
+    parser_intel_watchlists_subparsers = parser_intel_watchlists.add_subparsers(dest="intel_watchlist_command")
+    parser_intel_watchlist_creation = parser_intel_watchlists_subparsers.add_parser(
+        "new", help="Create new Threat Report for a Watchlist."
+    )
+    parser_intel_watchlist_creation.add_argument(
+        "report_path", action="store", help="Path to JSON representation of new Threat Report."
+    )
+    parser_intel_watchlist_creation.add_argument(
+        "-w", "--watchlist-id", required=True, action="store", help="The ID of a watchlist to append to."
+    )
 
     # intel feeds
     parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
@@ -490,6 +510,27 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 )
 
         if args.intel_command == "watchlists":
+            if args.intel_watchlist_command == "new":
+                report_data = {}
+                if not os.path.exists(args.report_path):
+                    LOGGER.error(f"{args.report_path} does not exist.")
+                    return False
+                with open(args.report_path, "r") as fp:
+                    report_data = json.load(fp)
+                if not report_data:
+                    LOGGER.error(f"failed to load report data")
+                    return False
+                watchlist_data = create_new_report_and_append_to_watchlist(cb, args.watchlist_id, report_data)
+                if watchlist_data:
+                    LOGGER.info(f"successfully appended new threat report to watchlist.")
+                return True
+
+            if args.write_basic_threat_report_template:
+                result = write_basic_report_template()
+                if result:
+                    LOGGER.info(f"wrote: {result}")
+                return result
+
             if args.list_watchlists:
                 watchlists = get_all_watchlists(cb)
                 if args.json:
