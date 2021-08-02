@@ -1,14 +1,14 @@
 """PSC Threathunter CLI functions."""
 
 import os
-import re
 import sys
 import argparse
 import datetime
 import logging
 import json
-import time
 import yaml
+
+from dateutil import tz
 
 from typing import List, Union
 
@@ -20,7 +20,7 @@ from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report
 from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
-from cbinterface.psc.query import make_process_query, print_facet_histogram
+from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
 from cbinterface.psc.ubs import (
     request_and_get_files,
     get_file_metadata,
@@ -75,6 +75,7 @@ from cbinterface.psc.process import (
     print_childprocs,
     print_scriptloads,
     process_to_dict,
+    format_event_data,
 )
 from cbinterface.commands import (
     PutFile,
@@ -750,6 +751,37 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             LOGGER.error(f"unexpected problem finding process: {e}")
             return False
 
+        # format datetimes as needed
+        args.start_time = (
+            datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+            if args.start_time
+            else args.start_time
+        )
+        args.end_time = (
+            datetime.datetime.strptime(args.end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+            if args.end_time
+            else args.end_time
+        )
+
+        if args.event_search:
+            for event in yield_events(
+                proc, query=args.event_search, start_time=args.start_time, end_time=args.end_time
+            ):
+                if args.raw_print_events:
+                    print(json.dumps(event, default=str, indent=2, sort_keys=True))
+                else:
+                    print(format_event_data(event))
+            return True
+
+        if args.json:
+            print(
+                json.dumps(
+                    process_to_dict(proc, start_time=args.start_time, end_time=args.end_time, event_rows=2000),
+                    default=str,
+                )
+            )
+            return
+
         all_inspection_args = [iarg for iarg in vars(args).keys() if iarg.startswith("inspect_")]
         set_inspection_args = [
             iarg for iarg, value in vars(args).items() if iarg.startswith("inspect_") and value is True
@@ -758,10 +790,6 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             LOGGER.debug(f"seting all inspection arguments.")
             for iarg in all_inspection_args:
                 args.__setattr__(iarg, True)
-
-        if args.json:
-            print(json.dumps(process_to_dict(proc), default=str))
-            return
 
         if args.walk_and_inspect_tree:
             inspect_process_tree(
@@ -775,6 +803,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 children=args.inspect_children,
                 scriptloads=args.inspect_scriptloads,
                 raw_print=args.raw_print_events,
+                start_time=args.start_time,
+                end_time=args.end_time,
             )
             return True
 
@@ -787,19 +817,21 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         if args.inspect_proc_info:
             print_process_info(proc, raw_print=args.raw_print_events)
         if args.inspect_filemods:
-            print_filemods(proc, raw_print=args.raw_print_events)
+            print_filemods(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_netconns:
-            print_netconns(proc, raw_print=args.raw_print_events)
+            print_netconns(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_regmods:
-            print_regmods(proc, raw_print=args.raw_print_events)
+            print_regmods(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_modloads:
-            print_modloads(proc, raw_print=args.raw_print_events)
+            print_modloads(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_crossprocs:
-            print_crossprocs(proc, raw_print=args.raw_print_events)
+            print_crossprocs(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_children:
-            print_childprocs(proc, raw_print=args.raw_print_events)
+            print_childprocs(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
         if args.inspect_scriptloads:
-            print_scriptloads(proc, raw_print=args.raw_print_events)
+            print_scriptloads(proc, raw_print=args.raw_print_events, start_time=args.start_time, end_time=args.end_time)
+
+        return True
 
     # Live Response Actions #
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):

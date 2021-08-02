@@ -222,6 +222,19 @@ def main():
         default=None,
         help="stop processing events into json after this many process segments",
     )
+    parser_inspect.add_argument("-es", "--event-search", action="store", help="Search process events.")
+    parser_inspect.add_argument(
+        "-st",
+        "--start-time",
+        action="store",
+        help="Return events that occurred AFTER this start time.  Format:'Y-m-d H:M:S' UTC",
+    )
+    parser_inspect.add_argument(
+        "-et",
+        "--end-time",
+        action="store",
+        help="Return events that occurred BEFORE this end time. Format:'Y-m-d H:M:S' UTC",
+    )
 
     # live response parser
     parser_lr = subparsers.add_parser(
