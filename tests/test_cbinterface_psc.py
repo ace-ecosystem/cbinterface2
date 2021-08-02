@@ -101,14 +101,11 @@ def test_process_to_dict(monkeypatch, mocker):
     data = get_dummy_process_data()
     p = load_dummy_process(monkeypatch)
 
-    def _events(self):
-        all_events = []
-        # NOTE, could use this same events HACK to allow users to parse events from json as-if from the Cb PSC.
-        for etype in p._events.keys():
-            all_events.extend(data["events"][etype])
-        return [Event(p._cb, initial_data=e) for e in all_events]
+    all_events = []
+    for etype in p._events.keys():
+        all_events.extend(data["events"][etype])
 
-    monkeypatch.setattr(Process, "events", _events)
+    mocker.patch("cbinterface.psc.process.yield_events", return_value=all_events)
     mocker.patch("cbinterface.psc.process.print_ancestry", return_value=data["process_ancestry"])
     mocker.patch("cbinterface.psc.process.print_process_tree", return_value=data["process_tree"])
     process_dict = process_to_dict(p)

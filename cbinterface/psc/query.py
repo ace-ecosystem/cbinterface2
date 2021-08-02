@@ -5,7 +5,6 @@
 import time
 import datetime
 import logging
-from dateutil.parser import isoparse
 
 from typing import Dict, List
 
@@ -25,15 +24,24 @@ def create_event_search(
     criteria: Dict = {},
     fields: List = ["*"],
     query: str = None,
-    rows=500,
+    time_range: Dict = {},
+    rows=1000,
     start: int = 0,
 ) -> Dict:
-    """Perform an event search."""
+    """Perform an event search.
+
+    Without anything specified, the default is to return ALL events for the process.
+    """
     # NOTE that this one is not job based search.
     url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
 
     if not search_data:
+        if not query:
+            query = f"process_guid:{p.get('process_guid')}"
         search_data = {"criteria": criteria, "fields": fields, "query": query, "rows": rows, "start": start}
+        if time_range:
+            # "time_range" = { "end": "2020-01-27T18:34:04Z", "start": "2020-01-18T18:34:04Z"}
+            search_data["time_range"] = time_range
 
     try:
         result = p._cb.post_object(url, search_data)
@@ -79,13 +87,19 @@ def yield_events(
     search_data: Dict = {},
     criteria: Dict = {},
     query: str = None,
-    rows=500,
+    rows=1000,
     start: int = 0,
     max_results: int = None,  # limit results returned
     start_time: datetime.datetime = None,
     end_time: datetime.datetime = None,
 ) -> Dict:
     """Yield Process Events resulting from Event search."""
+
+    time_range = {}
+    if start_time:
+        time_range["start"] = start_time.isoformat()
+    if end_time:
+        time_range["end"] = end_time.isoformat()
 
     position = start
     still_querying = True
@@ -95,28 +109,26 @@ def yield_events(
             search_data=search_data,
             criteria=criteria,
             query=query,
+            time_range=time_range,
             rows=rows,
             start=position,
         )
         if not result:
             return result
+        LOGGER.debug(
+            f"got result (minus events): {[f'{key}={result[key]}' for key in result.keys() if key !='results']}"
+        )
         if max_results and position + rows > max_results:
             # get however many rows that may result in max_results
             rows = max_results - position
 
-        total_results = result["num_found"]
+        total_results = result["num_available"]
+        if total_results != result["num_found"]:
+            LOGGER.debug(f"not all events are available.")
         results = result.get("results", [])
+
         LOGGER.debug(f"got {len(results)+position} out of {total_results} total events.")
         for item in results:
-            if start_time or end_time:
-                if item.get("event_timestamp"):
-                    event_time = isoparse(item.get("event_timestamp"))
-                    if start_time and event_time < start_time:
-                        position += 1
-                        continue
-                    if end_time and event_time > end_time:
-                        position += 1
-                        continue
             yield item
             position += 1
             if max_results and position >= max_results:

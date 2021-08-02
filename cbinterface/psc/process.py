@@ -1,11 +1,14 @@
 """Everthing ThreatHunter process related.
 """
 
+import datetime
 import logging
 
 from io import StringIO
 from contextlib import redirect_stdout
 from typing import Dict, Union, List
+
+from cbinterface.psc.query import yield_events
 
 from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Event
 from cbapi.errors import ObjectNotFoundError
@@ -13,6 +16,17 @@ from cbapi.errors import ObjectNotFoundError
 from cbinterface.helpers import as_configured_timezone, get_os_independent_filepath
 
 LOGGER = logging.getLogger("cbinterface.psc.process")
+
+ALL_EVENT_TYPES = [
+    "filemod",
+    "netconn",
+    "netconn_proxy" "regmod",
+    "modload",
+    "crossproc",
+    "childproc",
+    "scriptload",
+    "fileless_scriptload",
+]
 
 
 def load_process(p: Process) -> Process:
@@ -52,7 +66,13 @@ def is_process_loaded(p: Process) -> bool:
     return True
 
 
-def process_to_dict(p: Process, max_events: int = None) -> Dict:
+def process_to_dict(
+    p: Process,
+    max_events: int = None,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+    event_rows=2000,
+) -> Dict:
     """Convert process and it's events to a dictionary.
 
     Args:
@@ -69,10 +89,10 @@ def process_to_dict(p: Process, max_events: int = None) -> Dict:
     process["info"] = p._info
     process["events"] = {}
     event_count = 0
-    for event in p.events():
-        if event.event_type not in process["events"]:
-            process["events"][event.event_type] = []
-        process["events"][event.event_type].append(event._info)
+    for event in yield_events(p, start_time=start_time, end_time=end_time, rows=event_rows):
+        if event.get("event_type") not in process["events"]:
+            process["events"][event["event_type"]] = []
+        process["events"][event["event_type"]].append(event)
         event_count += 1
         if max_events is not None:
             assert isinstance(max_events, int)
@@ -194,9 +214,17 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
     except RecursionError:
         LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
         print(" [!] reached recursion limit walking process tree ...")
+    except ObjectNotFoundError:
+        LOGGER.warning(f"got 404 object not found for child process")
 
 
-def get_events_by_type(p: Union[Process, Dict], event_types: List[str], return_dict=False):
+def get_events_by_type(
+    p: Union[Process, Dict],
+    event_types: List[str],
+    return_dict=False,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+):
     """Return process events by event type.
 
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
@@ -216,7 +244,7 @@ def get_events_by_type(p: Union[Process, Dict], event_types: List[str], return_d
         # NOTE: when there are thousands of events... this under-the-hood will get ALL of them before returning..
         # return p.events(event_type=event_type)
         # So using our own code to yield events:
-        for event in yield_events(p, criteria={"event_type": event_types}):
+        for event in yield_events(p, criteria={"event_type": event_types}, start_time=start_time, end_time=end_time):
             if return_dict:
                 yield event
             else:
@@ -239,7 +267,9 @@ def format_filemod(fm: Union[Event, Dict]):
     )
 
 
-def print_filemods(p: Union[Process, Dict], raw_print=False):
+def print_filemods(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print file modifications.
 
     one or more of ACTION_INVALID, ACTION_FILE_CREATE, ACTION_FILE_WRITE, ACTION_FILE_DELETE, ACTION_FILE_LAST_WRITE, ACTION_FILE_MOD_OPEN,
@@ -247,7 +277,7 @@ def print_filemods(p: Union[Process, Dict], raw_print=False):
      ACTION_FILE_OPEN_EXECUTE, ACTION_FILE_READ
     """
     print("------ FILEMODS ------")
-    for fm in get_events_by_type(p, ["filemod"]):
+    for fm in get_events_by_type(p, ["filemod"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(fm)
             continue
@@ -282,9 +312,7 @@ def format_netconn(nc: Union[Event, Dict]):
         local_ipv4 = socket.inet_ntoa(struct.pack("!i", local_ipv4))
     local_ipv6 = nc.get("netconn_local_ipv6", "")
     if local_ipv6:
-        # TODO: test this.
-        ipv6_addr = ipaddress.ip_address(int(local_ipv6, 16)).exploded
-        # local_ipv6 = f"ipv6({local_ipv6})"
+        local_ipv6 = ipaddress.ip_address(int(local_ipv6, 16))
     local = f"from {local_ipv4}{local_ipv6}:{nc.get('netconn_local_port')}"
 
     proxy_ipv4 = nc.get("netconn_proxy_ipv4", "")
@@ -292,35 +320,35 @@ def format_netconn(nc: Union[Event, Dict]):
         proxy_ipv4 = socket.inet_ntoa(struct.pack("!i", proxy_ipv4))
     proxy_ipv6 = nc.get("netconn_proxy_ipv6", "")
     if proxy_ipv6:
-        proxy_ipv6 = ipaddress.ip_address(int(proxy_ipv6, 16)).exploded
+        proxy_ipv6 = ipaddress.ip_address(int(proxy_ipv6, 16))
     proxy = ""
     if proxy_ipv6 or proxy_ipv4:
-        proxy = f"proxied via {proxy_ipv4}{proxy_ipv6}:{nc.get('netconn_proxy_port')}:{nc.get('netconn_remote_port')}"
+        proxy = f" proxied via {proxy_ipv4}{proxy_ipv6}:{nc.get('netconn_proxy_port')}:{nc.get('netconn_remote_port')}"
 
     remote_ipv4 = nc.get("netconn_remote_ipv4", "")
     if remote_ipv4:
         remote_ipv4 = socket.inet_ntoa(struct.pack("!i", remote_ipv4))
     remote_ipv6 = nc.get("netconn_remote_ipv6", "")
     if remote_ipv6:
-        # TODO: insert a colon character between every four alphanumeric characters
-        remote_ipv6 = ipaddress.ip_address(int(remote_ipv6, 16)).exploded
-        # remote_ipv6 = f"ipv6({remote_ipv6})"
+        remote_ipv6 = ipaddress.ip_address(int(remote_ipv6, 16))
     remote = ""
     if remote_ipv4 or remote_ipv6:
-        remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')} "
+        remote = f"{remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')} "
 
     domain = f"domain={nc.get('netconn_domain')}" if nc.get("netconn_domain") else ""
-    return f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local} {proxy} to {remote}{domain}"
+    return f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local}{proxy} to {remote}{domain}"
 
 
-def print_netconns(p: Union[Process, Dict], raw_print=False):
+def print_netconns(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print network connection events. Both netconn and netconn_proxy events.
 
     action is one or more of: ACTION_CONNECTION_CREATE, ACTION_CONNECTION_CLOSE,
      ACTION_CONNECTION_ESTABLISHED, ACTION_CONNECTION_CREATE_FAILED, ACTION_CONNECTION_LISTEN
     """
     print("------ NETCONNS ------")
-    for nc in get_events_by_type(p, ["netconn", "netconn_proxy"]):
+    for nc in get_events_by_type(p, ["netconn", "netconn_proxy"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(nc)
             continue
@@ -345,14 +373,16 @@ def format_regmod(rm: Union[Event, Dict]):
     return f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
 
 
-def print_regmods(p: Union[Process, Dict], raw_print=False):
+def print_regmods(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print registry modifications.
 
     Actions: ACTION_INVALID, ACTION_CREATE_KEY, ACTION_WRITE_VALUE, ACTION_DELETE_KEY, ACTION_DELETE_VALUE,
         ACTION_RENAME_KEY, ACTION_RESTORE_KEY, ACTION_REPLACE_KEY, ACTION_SET_SECURITY
     """
     print("------ REGMODS ------")
-    for rm in get_events_by_type(p, ["regmod"]):
+    for rm in get_events_by_type(p, ["regmod"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(rm)
             continue
@@ -370,17 +400,19 @@ def format_scriptload(sl: Union[Event, Dict]):
         return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('fileless_scriptload_cmdline')}\n"
 
 
-def print_scriptloads(p: Union[Process, Dict], raw_print=False):
+def print_scriptloads(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print scriptloads and fileless scriptloads."""
     print("------ SCRIPTLOADS ------")
-    for sl in get_events_by_type(p, ["scriptload"]):
+    for sl in get_events_by_type(p, ["scriptload"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(sl)
             continue
         print(format_scriptload(sl))
     print()
     print("------ FILELESS SCRIPTLOADS ------")
-    for sl in get_events_by_type(p, ["fileless_scriptload"]):
+    for sl in get_events_by_type(p, ["fileless_scriptload"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(sl)
             continue
@@ -398,10 +430,12 @@ def format_modload(ml: Union[Event, Dict]):
     return f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
 
 
-def print_modloads(p: Union[Process, Dict], raw_print=False):
+def print_modloads(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print modual/library loads."""
     print("------ MODLOADS ------")
-    for ml in get_events_by_type(p, ["modload"]):
+    for ml in get_events_by_type(p, ["modload"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(ml)
             continue
@@ -422,14 +456,16 @@ def format_crossproc(cp: Union[Event, Dict]):
     return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
 
 
-def print_crossprocs(p: Union[Process, Dict], raw_print=False):
+def print_crossprocs(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print Cross Process activity.
 
     Actions: ACTION_DUP_PROCESS_HANDLE, ACTION_OPEN_THREAD_HANDLE, ACTION_DUP_THREAD_HANDLE,
         ACTION_CREATE_REMOTE_THREAD, ACTION_API_CALL
     """
     print("------ CROSSPROCS ------")
-    for cp in get_events_by_type(p, ["crossproc"]):
+    for cp in get_events_by_type(p, ["crossproc"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(cp)
             continue
@@ -442,10 +478,12 @@ def format_childproc(cp: Union[Event, Dict]):
     return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {cp.get('childproc_cmdline')}  - {cp.get('childproc_process_guid')}"
 
 
-def print_childprocs(p: Union[Process, Dict], raw_print=False):
+def print_childprocs(
+    p: Union[Process, Dict], raw_print=False, start_time: datetime.datetime = None, end_time: datetime.datetime = None
+):
     """Print child process events."""
     print("------ CHILDPROCS ------")
-    for cp in get_events_by_type(p, ["childproc"]):
+    for cp in get_events_by_type(p, ["childproc"], start_time=start_time, end_time=end_time):
         if raw_print:
             print(cp)
             continue
@@ -484,6 +522,8 @@ def inspect_process_tree(
     scriptloads=False,
     max_depth=0,
     depth=0,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
     **kwargs,
 ):
     """Walk down the execution chain and print inspection points."""
@@ -499,36 +539,41 @@ def inspect_process_tree(
     if info:
         print_process_info(proc, **kwargs)
     if filemods:
-        print_filemods(proc, **kwargs)
+        print_filemods(proc, start_time=start_time, end_time=end_time, **kwargs)
     if netconns:
-        print_netconns(proc, **kwargs)
+        print_netconns(proc, start_time=start_time, end_time=end_time, **kwargs)
     if regmods:
-        print_regmods(proc, **kwargs)
+        print_regmods(proc, start_time=start_time, end_time=end_time, **kwargs)
     if modloads:
-        print_modloads(proc, **kwargs)
+        print_modloads(proc, start_time=start_time, end_time=end_time, **kwargs)
     if crossprocs:
-        print_crossprocs(proc, **kwargs)
+        print_crossprocs(proc, start_time=start_time, end_time=end_time, **kwargs)
     if children:
-        print_childprocs(proc, **kwargs)
+        print_childprocs(proc, start_time=start_time, end_time=end_time, **kwargs)
     if scriptloads:
-        print_scriptloads(proc, **kwargs)
+        print_scriptloads(proc, start_time=start_time, end_time=end_time, **kwargs)
 
-    for child in proc.children:
-        try:
-            inspect_process_tree(
-                child,
-                info=info,
-                filemods=filemods,
-                netconns=netconns,
-                regmods=regmods,
-                modloads=modloads,
-                crossprocs=crossprocs,
-                children=children,
-                scriptloads=scriptloads,
-                max_depth=max_depth,
-                depth=depth + 1,
-                **kwargs,
-            )
-        except RecursionError:
-            LOGGER.warning(f"hit RecursionError inspecting process tree.")
-            break
+    try:
+        for child in proc.children:
+            try:
+                inspect_process_tree(
+                    child,
+                    info=info,
+                    filemods=filemods,
+                    netconns=netconns,
+                    regmods=regmods,
+                    modloads=modloads,
+                    crossprocs=crossprocs,
+                    children=children,
+                    scriptloads=scriptloads,
+                    max_depth=max_depth,
+                    depth=depth + 1,
+                    start_time=start_time,
+                    end_time=end_time,
+                    **kwargs,
+                )
+            except RecursionError:
+                LOGGER.warning(f"hit RecursionError inspecting process tree.")
+                break
+    except ObjectNotFoundError as e:
+        LOGGER.warning(f"got object not found error for child proc: {e}")
