@@ -27,6 +27,7 @@ def create_event_search(
     time_range: Dict = {},
     rows=1000,
     start: int = 0,
+    sort: Dict = [{"field": "event_timestamp", "order": "asc"}],
 ) -> Dict:
     """Perform an event search.
 
@@ -38,7 +39,14 @@ def create_event_search(
     if not search_data:
         if not query:
             query = f"process_guid:{p.get('process_guid')}"
-        search_data = {"criteria": criteria, "fields": fields, "query": query, "rows": rows, "start": start}
+        search_data = {
+            "criteria": criteria,
+            "fields": fields,
+            "query": query,
+            "rows": rows,
+            "start": start,
+            "sort": sort,
+        }
         if time_range:
             # "time_range" = { "end": "2020-01-27T18:34:04Z", "start": "2020-01-18T18:34:04Z"}
             search_data["time_range"] = time_range
