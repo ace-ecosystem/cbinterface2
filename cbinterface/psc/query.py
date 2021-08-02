@@ -1,12 +1,13 @@
 """Functions that work with query related Carbon Black APIs.
 """
 
+
 import time
 import datetime
 import logging
-from dateutil import tz
+from dateutil.parser import isoparse
 
-from typing import Union, Dict, List
+from typing import Dict, List
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
@@ -22,24 +23,27 @@ def create_event_search(
     p: Process,
     search_data: Dict = {},
     criteria: Dict = {},
+    fields: List = ["*"],
     query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "device_timestamp", "order": "asc"}],
+    rows=500,
     start: int = 0,
 ) -> Dict:
-    # url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs"
+    """Perform an event search.
+    """
+    # NOTE that this one is not job based search.
     url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
+
     if not search_data:
-        search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
+        search_data = {"criteria": criteria, "fields": fields, "query": query, "rows": rows, "start": start}
+
     try:
-        print(search_data)
         result = p._cb.post_object(url, search_data)
         return result.json()
     except ServerError as e:
-        LOGGER.error(f"Caught ServerError searching alerts: {e}")
+        LOGGER.error(f"Caught ServerError searching events: {e}")
         return False
     except ClientError as e:
-        LOGGER.warning(f"got ClientError searching alerts: {e}")
+        LOGGER.warning(f"got ClientError searching events: {e}")
         return False
     except ValueError:
         LOGGER.warning(f"got unexpected {result}")
@@ -72,51 +76,56 @@ def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
 
 
 def yield_events(
-    cb: CbThreatHunterAPI,
+    p: Process,
     search_data: Dict = {},
     criteria: Dict = {},
     query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
+    rows=500,
     start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
     max_results: int = None,  # limit results returned
+    start_time: datetime.datetime =None,
+    end_time: datetime.datetime =None
 ) -> Dict:
-    """Yield Alerts resulting from alert search."""
-    # create the search
-    result = create_event_search(
-        cb,
-        search_data=search_data,
-        criteria=criteria,
-        query=query,
-        rows=rows,
-        sort=sort,
-        start=start,
-        workflow_state=workflow_state,
-    )
-    if not result:
-        return result
-    job_id = result["job_id"]
+    """Yield Process Events resulting from Event search."""
+
     position = start
     still_querying = True
     while still_querying:
+        result = create_event_search(
+                    p,
+                    search_data=search_data,
+                    criteria=criteria,
+                    query=query,
+                    rows=rows,
+                    start=position,
+                )
+        if not result:
+            return result
         if max_results and position + rows > max_results:
             # get however many rows that may result in max_results
             rows = max_results - position
-        # get the results
-        result = get_event_search_results(cb, job_id)
-        if not result:
-            return result
+
         total_results = result["num_found"]
         results = result.get("results", [])
-        LOGGER.debug(f"got {len(results)+position} out of {total_results} total alerts.")
+        LOGGER.debug(f"got {len(results)+position} out of {total_results} total events.")
         for item in results:
+            if start_time or end_time:
+                if item.get('event_timestamp'):
+                    event_time = isoparse(item.get('event_timestamp'))
+                    if start_time and event_time < start_time:
+                        position += 1
+                        continue
+                    if end_time and event_time > end_time:
+                        position += 1
+                        continue
             yield item
             position += 1
             if max_results and position >= max_results:
                 still_querying = False
                 break
         if position >= total_results:
+            if result.get("processed_segments") != result.get("total_segments"):
+                LOGGER.warning(f"got all available events but CBC reports that all process segments have not been processed.")
             still_querying = False
             break
 

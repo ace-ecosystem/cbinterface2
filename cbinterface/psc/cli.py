@@ -20,7 +20,7 @@ from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report
 from cbapi.psc.threathunter.query import Query
 
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
-from cbinterface.psc.query import make_process_query, print_facet_histogram
+from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
 from cbinterface.psc.ubs import (
     request_and_get_files,
     get_file_metadata,
@@ -75,6 +75,7 @@ from cbinterface.psc.process import (
     print_childprocs,
     print_scriptloads,
     process_to_dict,
+    format_event_data
 )
 from cbinterface.commands import (
     PutFile,
@@ -750,6 +751,22 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             LOGGER.error(f"unexpected problem finding process: {e}")
             return False
 
+        if args.event_search:
+            from dateutil import tz
+            args.start_time = (
+                datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT")) if args.start_time else args.start_time
+            )
+            args.end_time = (
+                datetime.datetime.strptime(args.end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT")) if args.end_time else args.end_time
+            )
+            for event in yield_events(proc, query=args.event_search, start_time=args.start_time, end_time=args.end_time):
+                if args.raw_print_events:
+                    print(json.dumps(event, default=str, indent=2, sort_keys=True))
+                else:
+                    print(format_event_data(event))
+            return True
+
+
         all_inspection_args = [iarg for iarg in vars(args).keys() if iarg.startswith("inspect_")]
         set_inspection_args = [
             iarg for iarg, value in vars(args).items() if iarg.startswith("inspect_") and value is True
@@ -800,6 +817,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_childprocs(proc, raw_print=args.raw_print_events)
         if args.inspect_scriptloads:
             print_scriptloads(proc, raw_print=args.raw_print_events)
+
+        return True
 
     # Live Response Actions #
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):

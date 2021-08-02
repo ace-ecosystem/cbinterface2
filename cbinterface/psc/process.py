@@ -1,15 +1,13 @@
 """Everthing ThreatHunter process related.
 """
 
-import json
 import logging
 
 from io import StringIO
-from datetime import datetime
 from contextlib import redirect_stdout
-from typing import Dict, Union
+from typing import Dict, Union, List
 
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process
+from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Event
 from cbapi.errors import ObjectNotFoundError
 
 from cbinterface.helpers import as_configured_timezone, get_os_independent_filepath
@@ -95,12 +93,12 @@ def process_to_dict(p: Process, max_events: int = None) -> Dict:
     return process
 
 
-def print_process_info(proc: Process, return_string: bool = False, raw_print=False, header=True):
+def print_process_info(proc: Process, yield_strings: bool = False, raw_print=False, header=True):
     """Analyst friendly custom process data format.
 
     Args:
         proc: CbTH Process (fully initialized)
-        return_string: return string if True, else print it to stdout.
+        yield_strings: return string if True, else print it to stdout.
     Returns: string or None
     """
 
@@ -134,13 +132,14 @@ def print_process_info(proc: Process, return_string: bool = False, raw_print=Fal
         txt += f"  Parent GUID: {proc.get('parent_guid')}\n"
         parent_sha256 = next((hsh for hsh in proc.get("parent_hash", []) if len(hsh) == 64), None)
         txt += f"  Parent SHA256: {parent_sha256}\n"
-        txt += f"  Username: {proc.get('process_username')}\n"
+        txt += f"  Process Username: {proc.get('process_username')}\n"
+        txt += f"  Device Username: {proc.get('device_username')}\n"
         txt += f"  Device ID: {proc.get('device_id')}\n"
         txt += f"  Device Name: {proc.get('device_name')}\n"
         txt += f"  Device OS: {proc.get('device_os')}\n"
         txt += f"  External IP: {proc.get('device_external_ip')}\n"
         txt += f"  Internal IP: {proc.get('device_internal_ip')}\n"
-    if return_string:
+    if yield_strings:
         return txt
     txt += "\n"
     print(txt)
@@ -197,233 +196,279 @@ def print_process_tree(p: Process, max_depth=0, depth=0):
         print(" [!] reached recursion limit walking process tree ...")
 
 
-def get_events_by_type(p: Union[Process, Dict], event_type: str):
+def get_events_by_type(p: Union[Process, Dict], event_types: List[str], return_dict=False):
     """Return process events by event type.
 
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
-        fileless_scriptload
+        fileless_scriptload, netconn_proxy
     """
+    from cbinterface.psc.query import yield_events
+
     if isinstance(p, dict):
         # processing from json file
         assert "events" in p
-        return p["events"].get(event_type, [])
+        events = []
+        for event_type in event_types:
+            events.extend(p["events"].get(event_type, []))
+        return events
 
-    # we only load the process here to check for the presence of event_types
-    # only make event api calls for processes that report having those events
-    """# XXX - UPDATE - NOTE: These processes LIE; sometimes procs say they don't have events when they do.
-    if not is_process_loaded(p):
-        p = load_process(p)
-    event_count = p.get(f"{event_type}_count")
-    if event_count is not None and event_count == 0:
-        LOGGER.debug(f"processes reports not having any events of type: {event_type}")
-        return []
-    """
     try:
-        return p.events(event_type=event_type)
+        # NOTE: when there are thousands of events... this under-the-hood will get ALL of them before returning..
+        #return p.events(event_type=event_type)
+        # So using our own code to yield events:
+        for event in yield_events(p, criteria={"event_type": event_types}):
+            if return_dict:
+                yield event
+            else:
+                yield Event(p._cb, initial_data=event)
     except Exception as e:
         LOGGER.error(f"failed to get events: {e}")
         return []
 
+def format_filemod(fm: Union[Event, Dict]):
+    """Format filemod event into single line.
+    """
+    _action_summary = [action[len("ACTION_") :] for action in fm.get("filemod_action", [])]
+    _edge_actions = [action for action in _action_summary if not action.startswith("FILE")]
+    _fm_action_summary = [action[len("FILE_") :] for action in _action_summary if action.startswith("FILE")]
+    _fm_action_summary.extend(_edge_actions)
+    action_summary = ",".join(_fm_action_summary)
+    fm_sha256 = f" , sha256:{fm.get('filemod_sha256')}" if fm.get("filemod_sha256") else ""
+    return f" @{as_configured_timezone(fm.get('event_timestamp'))}: |{action_summary}| {fm.get('filemod_name')}{fm_sha256}"
 
-def print_filemods(p: Union[Process, Dict], raw_print=False, return_string: bool = False, **kwargs):
+def print_filemods(p: Union[Process, Dict], raw_print=False):
     """Print file modifications.
 
     one or more of ACTION_INVALID, ACTION_FILE_CREATE, ACTION_FILE_WRITE, ACTION_FILE_DELETE, ACTION_FILE_LAST_WRITE, ACTION_FILE_MOD_OPEN,
      ACTION_FILE_RENAME, ACTION_FILE_UNDELETE, ACTION_FILE_TRUNCATE, ACTION_FILE_OPEN_READ, ACTION_FILE_OPEN_WRITE, ACTION_FILE_OPEN_DELETE,
      ACTION_FILE_OPEN_EXECUTE, ACTION_FILE_READ
     """
-
-    txt = "------ FILEMODS ------\n"
-    for fm in get_events_by_type(p, "filemod"):
+    print("------ FILEMODS ------")
+    for fm in get_events_by_type(p, ["filemod"]):
         if raw_print:
-            txt += str(fm)
+            print(fm)
             continue
-        _action_summary = [action[len("ACTION_") :] for action in fm.get("filemod_action", [])]
-        _edge_actions = [action for action in _action_summary if not action.startswith("FILE")]
-        _fm_action_summary = [action[len("FILE_") :] for action in _action_summary if action.startswith("FILE")]
-        _fm_action_summary.extend(_edge_actions)
-        action_summary = ",".join(_fm_action_summary)
-        fm_sha256 = f" , sha256:{fm.get('filemod_sha256')}" if fm.get("filemod_sha256") else ""
-        txt += f" @{as_configured_timezone(fm.get('event_timestamp'))}: |{action_summary}| {fm.get('filemod_name')}{fm_sha256}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_filemod(fm))
+    print()
+
+def format_netconn(nc: Union[Event, Dict]):
+    """Format netconn or netconn_proxy event into a single line.
+    """
+    import ipaddress
+    import socket, struct
+    action = (
+        nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
+        if nc.get("netconn_action", "").startswith("ACTION_CONNECTION_")
+        else nc.get("netconn_action")
+    )
+    if action == "CREATE":
+        # same behavior as PSC GUI
+        action = "ESTABLISHED"
+    action = action.capitalize()
+    protocol = nc.get("netconn_protocol", "")
+    if protocol.startswith("PROTO_"):
+        protocol = protocol[len("PROTO_") :]
+    direction = "inbound" if nc.get("netconn_inbound") else "outbound"
+
+    # NOTE: Cb stores ipv4 as integers and returns them as such. Their documentation is lacking but
+    # research suggests they follow https://tools.ietf.org/html/rfc1700 and big-endian int can be assumed.
+
+    local_ipv4 = nc.get("netconn_local_ipv4", "")
+    if local_ipv4:
+        local_ipv4 = socket.inet_ntoa(struct.pack("!i", local_ipv4))
+    local_ipv6 = nc.get("netconn_local_ipv6", "")
+    if local_ipv6:
+        # TODO: test this.
+        ipv6_addr = ipaddress.ip_address(int(local_ipv6, 16)).exploded
+        #local_ipv6 = f"ipv6({local_ipv6})"
+    local = f"from {local_ipv4}{local_ipv6}:{nc.get('netconn_local_port')}"
+
+    proxy_ipv4 = nc.get("netconn_proxy_ipv4", "")
+    if proxy_ipv4:
+        proxy_ipv4 = socket.inet_ntoa(struct.pack("!i", proxy_ipv4))
+    proxy_ipv6 = nc.get("netconn_proxy_ipv6", "")
+    if proxy_ipv6:
+        proxy_ipv6 = ipaddress.ip_address(int(proxy_ipv6, 16)).exploded
+    proxy = ""
+    if proxy_ipv6 or proxy_ipv4:
+        proxy = f"proxied via {proxy_ipv4}{proxy_ipv6}:{nc.get('netconn_proxy_port')}:{nc.get('netconn_remote_port')}"
+
+    remote_ipv4 = nc.get("netconn_remote_ipv4", "")
+    if remote_ipv4:
+        remote_ipv4 = socket.inet_ntoa(struct.pack("!i", remote_ipv4))
+    remote_ipv6 = nc.get("netconn_remote_ipv6", "")
+    if remote_ipv6:
+        # TODO: insert a colon character between every four alphanumeric characters
+        remote_ipv6 = ipaddress.ip_address(int(remote_ipv6, 16)).exploded
+        #remote_ipv6 = f"ipv6({remote_ipv6})"
+    remote = ""
+    if remote_ipv4 or remote_ipv6:
+        remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')} "
+
+    domain = f"domain={nc.get('netconn_domain')}" if nc.get("netconn_domain") else ""
+    return f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local} {proxy} to {remote}{domain}"
 
 
-def print_netconns(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
-    """Print network connection events.
+def print_netconns(p: Union[Process, Dict], raw_print=False):
+    """Print network connection events. Both netconn and netconn_proxy events.
 
     action is one or more of: ACTION_CONNECTION_CREATE, ACTION_CONNECTION_CLOSE,
      ACTION_CONNECTION_ESTABLISHED, ACTION_CONNECTION_CREATE_FAILED, ACTION_CONNECTION_LISTEN
     """
-    import socket, struct
-
-    txt = "------ NETCONNS ------\n"
-    for nc in get_events_by_type(p, "netconn"):
+    print("------ NETCONNS ------")
+    for nc in get_events_by_type(p, ["netconn", "netconn_proxy"]):
         if raw_print:
-            txt += str(nc)
+            print(nc)
             continue
-        action = (
-            nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
-            if nc.get("netconn_action", "").startswith("ACTION_CONNECTION_")
-            else nc.get("netconn_action")
-        )
-        if action == "CREATE":
-            # same behavior as PSC GUI
-            action = "ESTABLISHED"
-        action = action.capitalize()
-        protocol = nc.get("netconn_protocol", "")
-        if protocol.startswith("PROTO_"):
-            protocol = protocol[len("PROTO_") :]
-        direction = "inbound" if nc.get("netconn_inbound") else "outbound"
-
-        # NOTE: Cb stores ipv4 as integers and returns them as such. Their documentation is lacking but
-        # research suggests they follow https://tools.ietf.org/html/rfc1700 and big-endian int can be assumed.
-
-        local_ipv4 = nc.get("netconn_local_ipv4", "")
-        if local_ipv4:
-            local_ipv4 = socket.inet_ntoa(struct.pack("!i", local_ipv4))
-        local_ipv6 = nc.get("netconn_local_ipv6", "")
-        if local_ipv6:
-            # TODO: insert a colon character between every four alphanumeric characters
-            local_ipv6 = f"ipv6({local_ipv6})"
-        local = f"from {local_ipv4}{local_ipv6}:{nc.get('netconn_local_port')}"
-
-        remote_ipv4 = nc.get("netconn_remote_ipv4", "")
-        if remote_ipv4:
-            remote_ipv4 = socket.inet_ntoa(struct.pack("!i", remote_ipv4))
-        remote_ipv6 = nc.get("netconn_remote_ipv6", "")
-        if remote_ipv6:
-            # TODO: insert a colon character between every four alphanumeric characters
-            remote_ipv6 = f"ipv6({remote_ipv6})"
-        remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')}"
-
-        domain = f"(domain={nc.get('netconn_domain')})" if nc.get("netconn_domain") else ""
-        txt += f" @{as_configured_timezone(nc.get('event_timestamp'))}: {action} {direction} {protocol} {local} {remote} {domain}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_netconn(nc))
+    print()
 
 
-def print_regmods(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
+def format_regmod(rm: Union[Event, Dict]):
+    """Format regmod event into single line.
+    """
+    actions = []
+    for a in rm.get("regmod_action"):
+        if a.startswith("ACTION_"):
+            actions.append(a[len("ACTION_") :])
+        else:
+            actions.append(a)
+    # how could the list they return ever be greater than 1 with un-corrupted data?
+    action = actions[0]  # if len(actions) > 1 else actions
+    if "CREATE" in action:
+        action = "Created"
+    elif action == "WRITE_VALUE":
+        action = "Modified"
+    return f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
+
+def print_regmods(p: Union[Process, Dict], raw_print=False):
     """Print registry modifications.
 
     Actions: ACTION_INVALID, ACTION_CREATE_KEY, ACTION_WRITE_VALUE, ACTION_DELETE_KEY, ACTION_DELETE_VALUE,
         ACTION_RENAME_KEY, ACTION_RESTORE_KEY, ACTION_REPLACE_KEY, ACTION_SET_SECURITY
     """
-    txt = "------ REGMODS ------\n"
-    for rm in get_events_by_type(p, "regmod"):
+    print("------ REGMODS ------")
+    for rm in get_events_by_type(p, ["regmod"]):
         if raw_print:
-            txt += str(rm)
+            print(rm)
             continue
-        actions = []
-        for a in rm.get("regmod_action"):
-            if a.startswith("ACTION_"):
-                actions.append(a[len("ACTION_") :])
-            else:
-                actions.append(a)
-        # how could the list they return ever be greater than 1 with un-corrupted data?
-        action = actions[0]  # if len(actions) > 1 else actions
-        if "CREATE" in action:
-            action = "Created"
-        elif action == "WRITE_VALUE":
-            action = "Modified"
-        txt += f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_regmod(rm))
+    print()
 
 
-def print_scriptloads(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
-    """Print scriptloads and fileless scriptloads."""
-    txt = "------ SCRIPTLOADS ------\n"
-    for sl in get_events_by_type(p, "scriptload"):
-        if raw_print:
-            txt += str(sl)
-            continue
-
+def format_scriptload(sl: Union[Event, Dict]):
+    """Format scriptload event into single line.
+    """
+    if sl.get("event_type") == "scriptload":
         pub_state = ",".join([state[len("FILE_SIGNATURE_") :] for state in sl.get("scriptload_publisher_state", [])])
-        txt += f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}\n"
+        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}\n"
+   
+    if sl.get("event_type") == "fileless_scriptload":
+        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('fileless_scriptload_cmdline')}\n"
 
-    txt += "\n"
-    fileless_sl_events = get_events_by_type(p, "fileless_scriptload")
-    if fileless_sl_events:
-        txt += "------ FILELESS SCRIPTLOADS ------\n"
-    for fsl in fileless_sl_events:
+
+def print_scriptloads(p: Union[Process, Dict], raw_print=False):
+    """Print scriptloads and fileless scriptloads."""
+    print("------ SCRIPTLOADS ------")
+    for sl in get_events_by_type(p, ["scriptload"]):
         if raw_print:
-            txt += str(fsl)
+            print(sl)
             continue
-
-        txt += f" @{as_configured_timezone(fsl.get('event_timestamp'))}: {fsl.get('fileless_scriptload_cmdline')}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
-
-
-def print_modloads(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
-    """Print modual/library loads."""
-
-    txt = "------ MODLOADS ------\n"
-    for ml in get_events_by_type(p, "modload"):
+        print(format_scriptload(sl))
+    print()
+    print("------ FILELESS SCRIPTLOADS ------")
+    for sl in get_events_by_type(p, ["fileless_scriptload"]):
         if raw_print:
-            txt += str(ml)
+            print(sl)
             continue
-        # "for now can only be: ACTION_LOAD_MODULE"
-        # action = "Loaded" if ml.modload_action == 'ACTION_LOAD_MODULE' else ml.modload_action
-        ml_pub_state_summary = (
-            "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])])
-            or ""
-        )
-        txt += f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_scriptload(sl))
+    print()
 
 
-def print_crossprocs(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
+def format_modload(ml: Union[Event, Dict]):
+    """Format modload into single line.
+    """
+    # "for now can only be: ACTION_LOAD_MODULE"
+    # action = "Loaded" if ml.modload_action == 'ACTION_LOAD_MODULE' else ml.modload_action
+    ml_pub_state_summary = (
+        "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])])
+        or ""
+    )
+    return f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
+
+
+def print_modloads(p: Union[Process, Dict], raw_print=False):
+    """Print modual/library loads.
+    """
+    print("------ MODLOADS ------")
+    for ml in get_events_by_type(p, ["modload"]):
+        if raw_print:
+            print(ml)
+            continue
+        print(format_modload(ml))
+    print()
+
+
+def format_crossproc(cp: Union[Event, Dict]):
+    """Format crossproc into single line.
+    """
+    actions = [a[len("ACTION_") :] for a in cp.get("crossproc_action", [])]
+    if len(actions) == 1:
+        actions = actions[0]
+    else:
+        actions = ",".join(actions)
+    inverse_target = "from" if cp.get("crossproc_target") is True else "to"
+    direction = "<-" if cp.get("crossproc_target") is True else "->"
+    proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
+    return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
+
+def print_crossprocs(p: Union[Process, Dict], raw_print=False):
     """Print Cross Process activity.
 
     Actions: ACTION_DUP_PROCESS_HANDLE, ACTION_OPEN_THREAD_HANDLE, ACTION_DUP_THREAD_HANDLE,
         ACTION_CREATE_REMOTE_THREAD, ACTION_API_CALL
     """
-    txt = "------ CROSSPROCS ------\n"
-    for cp in get_events_by_type(p, "crossproc"):
+    print("------ CROSSPROCS ------")
+    for cp in get_events_by_type(p, ["crossproc"]):
         if raw_print:
-            txt += str(cp)
+            print(cp)
             continue
-        actions = [a[len("ACTION_") :] for a in cp.get("crossproc_action", [])]
-        if len(actions) == 1:
-            actions = actions[0]
-        else:
-            actions = ",".join(actions)
-        inverse_target = "from" if cp.get("crossproc_target") is True else "to"
-        direction = "<-" if cp.get("crossproc_target") is True else "->"
-        proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
-        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_crossproc(cp))
+    print()
+
+def format_childproc(cp: Union[Event, Dict]):
+    """Format childproc event into single line.
+    """
+    return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {cp.get('childproc_cmdline')}  - {cp.get('childproc_process_guid')}"
 
 
-def print_childprocs(p: Union[Process, Dict], raw_print=False, return_string: bool = False):
+def print_childprocs(p: Union[Process, Dict], raw_print=False):
     """Print child process events."""
-    txt = "------ CHILDPROCS ------\n"
-    for cp in get_events_by_type(p, "childproc"):
+    print("------ CHILDPROCS ------")
+    for cp in get_events_by_type(p, ["childproc"]):
         if raw_print:
-            txt += str(cp)
+            print(cp)
             continue
-        txt += f" @{as_configured_timezone(cp.get('event_timestamp'))}: {cp.get('childproc_cmdline')}  - {cp.get('childproc_process_guid')}"
-    txt += "\n"
-    if return_string:
-        return txt
-    print(txt)
+        print(format_childproc(cp))
+    print()
 
+def format_event_data(event_data: Dict):
+    assert "event_type" in event_data
+    if "netconn" in event_data["event_type"]:
+        return format_netconn(event_data)
+    if event_data["event_type"] == "filemod":
+        return format_filemod(event_data)
+    if event_data["event_type"] == "modload":
+        return format_modload(event_data)
+    if "scriptload" in event_data["event_type"]:
+        return format_scriptload(event_data)
+    if event_data["event_type"] == "childproc":
+        return format_childproc(event_data)
+    if event_data["event_type"] == "crossproc":
+        return format_crossproc(event_data)
+    if event_data["event_type"] == "regmod":
+        return format_regmod(event_data)
+    LOGGER.warning(f"unknown event of type: {event_data['event_type']}")
 
 def inspect_process_tree(
     proc: Process,
