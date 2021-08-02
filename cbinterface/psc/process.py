@@ -214,7 +214,7 @@ def get_events_by_type(p: Union[Process, Dict], event_types: List[str], return_d
 
     try:
         # NOTE: when there are thousands of events... this under-the-hood will get ALL of them before returning..
-        #return p.events(event_type=event_type)
+        # return p.events(event_type=event_type)
         # So using our own code to yield events:
         for event in yield_events(p, criteria={"event_type": event_types}):
             if return_dict:
@@ -225,16 +225,19 @@ def get_events_by_type(p: Union[Process, Dict], event_types: List[str], return_d
         LOGGER.error(f"failed to get events: {e}")
         return []
 
+
 def format_filemod(fm: Union[Event, Dict]):
-    """Format filemod event into single line.
-    """
+    """Format filemod event into single line."""
     _action_summary = [action[len("ACTION_") :] for action in fm.get("filemod_action", [])]
     _edge_actions = [action for action in _action_summary if not action.startswith("FILE")]
     _fm_action_summary = [action[len("FILE_") :] for action in _action_summary if action.startswith("FILE")]
     _fm_action_summary.extend(_edge_actions)
     action_summary = ",".join(_fm_action_summary)
     fm_sha256 = f" , sha256:{fm.get('filemod_sha256')}" if fm.get("filemod_sha256") else ""
-    return f" @{as_configured_timezone(fm.get('event_timestamp'))}: |{action_summary}| {fm.get('filemod_name')}{fm_sha256}"
+    return (
+        f" @{as_configured_timezone(fm.get('event_timestamp'))}: |{action_summary}| {fm.get('filemod_name')}{fm_sha256}"
+    )
+
 
 def print_filemods(p: Union[Process, Dict], raw_print=False):
     """Print file modifications.
@@ -251,11 +254,12 @@ def print_filemods(p: Union[Process, Dict], raw_print=False):
         print(format_filemod(fm))
     print()
 
+
 def format_netconn(nc: Union[Event, Dict]):
-    """Format netconn or netconn_proxy event into a single line.
-    """
+    """Format netconn or netconn_proxy event into a single line."""
     import ipaddress
     import socket, struct
+
     action = (
         nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
         if nc.get("netconn_action", "").startswith("ACTION_CONNECTION_")
@@ -280,7 +284,7 @@ def format_netconn(nc: Union[Event, Dict]):
     if local_ipv6:
         # TODO: test this.
         ipv6_addr = ipaddress.ip_address(int(local_ipv6, 16)).exploded
-        #local_ipv6 = f"ipv6({local_ipv6})"
+        # local_ipv6 = f"ipv6({local_ipv6})"
     local = f"from {local_ipv4}{local_ipv6}:{nc.get('netconn_local_port')}"
 
     proxy_ipv4 = nc.get("netconn_proxy_ipv4", "")
@@ -300,7 +304,7 @@ def format_netconn(nc: Union[Event, Dict]):
     if remote_ipv6:
         # TODO: insert a colon character between every four alphanumeric characters
         remote_ipv6 = ipaddress.ip_address(int(remote_ipv6, 16)).exploded
-        #remote_ipv6 = f"ipv6({remote_ipv6})"
+        # remote_ipv6 = f"ipv6({remote_ipv6})"
     remote = ""
     if remote_ipv4 or remote_ipv6:
         remote = f"to {remote_ipv4}{remote_ipv6}:{nc.get('netconn_remote_port')} "
@@ -325,8 +329,7 @@ def print_netconns(p: Union[Process, Dict], raw_print=False):
 
 
 def format_regmod(rm: Union[Event, Dict]):
-    """Format regmod event into single line.
-    """
+    """Format regmod event into single line."""
     actions = []
     for a in rm.get("regmod_action"):
         if a.startswith("ACTION_"):
@@ -340,6 +343,7 @@ def format_regmod(rm: Union[Event, Dict]):
     elif action == "WRITE_VALUE":
         action = "Modified"
     return f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
+
 
 def print_regmods(p: Union[Process, Dict], raw_print=False):
     """Print registry modifications.
@@ -357,12 +361,11 @@ def print_regmods(p: Union[Process, Dict], raw_print=False):
 
 
 def format_scriptload(sl: Union[Event, Dict]):
-    """Format scriptload event into single line.
-    """
+    """Format scriptload event into single line."""
     if sl.get("event_type") == "scriptload":
         pub_state = ",".join([state[len("FILE_SIGNATURE_") :] for state in sl.get("scriptload_publisher_state", [])])
         return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}\n"
-   
+
     if sl.get("event_type") == "fileless_scriptload":
         return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('fileless_scriptload_cmdline')}\n"
 
@@ -386,20 +389,17 @@ def print_scriptloads(p: Union[Process, Dict], raw_print=False):
 
 
 def format_modload(ml: Union[Event, Dict]):
-    """Format modload into single line.
-    """
+    """Format modload into single line."""
     # "for now can only be: ACTION_LOAD_MODULE"
     # action = "Loaded" if ml.modload_action == 'ACTION_LOAD_MODULE' else ml.modload_action
     ml_pub_state_summary = (
-        "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])])
-        or ""
+        "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])]) or ""
     )
     return f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
 
 
 def print_modloads(p: Union[Process, Dict], raw_print=False):
-    """Print modual/library loads.
-    """
+    """Print modual/library loads."""
     print("------ MODLOADS ------")
     for ml in get_events_by_type(p, ["modload"]):
         if raw_print:
@@ -410,8 +410,7 @@ def print_modloads(p: Union[Process, Dict], raw_print=False):
 
 
 def format_crossproc(cp: Union[Event, Dict]):
-    """Format crossproc into single line.
-    """
+    """Format crossproc into single line."""
     actions = [a[len("ACTION_") :] for a in cp.get("crossproc_action", [])]
     if len(actions) == 1:
         actions = actions[0]
@@ -421,6 +420,7 @@ def format_crossproc(cp: Union[Event, Dict]):
     direction = "<-" if cp.get("crossproc_target") is True else "->"
     proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
     return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
+
 
 def print_crossprocs(p: Union[Process, Dict], raw_print=False):
     """Print Cross Process activity.
@@ -436,9 +436,9 @@ def print_crossprocs(p: Union[Process, Dict], raw_print=False):
         print(format_crossproc(cp))
     print()
 
+
 def format_childproc(cp: Union[Event, Dict]):
-    """Format childproc event into single line.
-    """
+    """Format childproc event into single line."""
     return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {cp.get('childproc_cmdline')}  - {cp.get('childproc_process_guid')}"
 
 
@@ -451,6 +451,7 @@ def print_childprocs(p: Union[Process, Dict], raw_print=False):
             continue
         print(format_childproc(cp))
     print()
+
 
 def format_event_data(event_data: Dict):
     assert "event_type" in event_data
@@ -469,6 +470,7 @@ def format_event_data(event_data: Dict):
     if event_data["event_type"] == "regmod":
         return format_regmod(event_data)
     LOGGER.warning(f"unknown event of type: {event_data['event_type']}")
+
 
 def inspect_process_tree(
     proc: Process,

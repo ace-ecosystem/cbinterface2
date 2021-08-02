@@ -75,7 +75,7 @@ from cbinterface.psc.process import (
     print_childprocs,
     print_scriptloads,
     process_to_dict,
-    format_event_data
+    format_event_data,
 )
 from cbinterface.commands import (
     PutFile,
@@ -753,19 +753,25 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.event_search:
             from dateutil import tz
+
             args.start_time = (
-                datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT")) if args.start_time else args.start_time
+                datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+                if args.start_time
+                else args.start_time
             )
             args.end_time = (
-                datetime.datetime.strptime(args.end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT")) if args.end_time else args.end_time
+                datetime.datetime.strptime(args.end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+                if args.end_time
+                else args.end_time
             )
-            for event in yield_events(proc, query=args.event_search, start_time=args.start_time, end_time=args.end_time):
+            for event in yield_events(
+                proc, query=args.event_search, start_time=args.start_time, end_time=args.end_time
+            ):
                 if args.raw_print_events:
                     print(json.dumps(event, default=str, indent=2, sort_keys=True))
                 else:
                     print(format_event_data(event))
             return True
-
 
         all_inspection_args = [iarg for iarg in vars(args).keys() if iarg.startswith("inspect_")]
         set_inspection_args = [

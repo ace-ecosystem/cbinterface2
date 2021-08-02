@@ -222,7 +222,7 @@ def main():
         default=None,
         help="stop processing events into json after this many process segments",
     )
-    parser_inspect.add_argument('-es', '--event-search', action="store", help="Search process events.")
+    parser_inspect.add_argument("-es", "--event-search", action="store", help="Search process events.")
     parser_inspect.add_argument(
         "-st",
         "--start-time",

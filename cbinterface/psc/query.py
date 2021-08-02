@@ -28,8 +28,7 @@ def create_event_search(
     rows=500,
     start: int = 0,
 ) -> Dict:
-    """Perform an event search.
-    """
+    """Perform an event search."""
     # NOTE that this one is not job based search.
     url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
 
@@ -83,8 +82,8 @@ def yield_events(
     rows=500,
     start: int = 0,
     max_results: int = None,  # limit results returned
-    start_time: datetime.datetime =None,
-    end_time: datetime.datetime =None
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
 ) -> Dict:
     """Yield Process Events resulting from Event search."""
 
@@ -92,13 +91,13 @@ def yield_events(
     still_querying = True
     while still_querying:
         result = create_event_search(
-                    p,
-                    search_data=search_data,
-                    criteria=criteria,
-                    query=query,
-                    rows=rows,
-                    start=position,
-                )
+            p,
+            search_data=search_data,
+            criteria=criteria,
+            query=query,
+            rows=rows,
+            start=position,
+        )
         if not result:
             return result
         if max_results and position + rows > max_results:
@@ -110,8 +109,8 @@ def yield_events(
         LOGGER.debug(f"got {len(results)+position} out of {total_results} total events.")
         for item in results:
             if start_time or end_time:
-                if item.get('event_timestamp'):
-                    event_time = isoparse(item.get('event_timestamp'))
+                if item.get("event_timestamp"):
+                    event_time = isoparse(item.get("event_timestamp"))
                     if start_time and event_time < start_time:
                         position += 1
                         continue
@@ -125,7 +124,9 @@ def yield_events(
                 break
         if position >= total_results:
             if result.get("processed_segments") != result.get("total_segments"):
-                LOGGER.warning(f"got all available events but CBC reports that all process segments have not been processed.")
+                LOGGER.warning(
+                    f"got all available events but CBC reports that all process segments have not been processed."
+                )
             still_querying = False
             break
 
