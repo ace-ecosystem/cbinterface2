@@ -107,7 +107,7 @@ def process_to_dict(
 
     process["process_tree"] = StringIO()
     with redirect_stdout(process["process_tree"]):
-        print_process_tree(p)
+        print_process_tree(p, start_time=start_time, end_time=end_time)
     process["process_tree"] = process["process_tree"].getvalue()
 
     return process
@@ -190,26 +190,42 @@ def print_ancestry(p: Process, max_depth=0, depth=0):
             print_ancestry(parent, max_depth=max_depth, depth=depth + 1)
 
 
-def print_process_tree(p: Process, max_depth=0, depth=0):
+def print_process_tree(
+    p: Union[Process, Dict],
+    max_depth=0,
+    depth=0,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+):
     """Print the process tree."""
 
     if max_depth and depth > max_depth:
         return
 
     if depth == 0:
-        if not is_process_loaded(p):
-
+        if isinstance(p, Process) and not is_process_loaded(p):
             p = load_process(p)
+
         print("\n------ Process Execution Tree ------")
         print()
 
-    command_line = (
-        p.process_cmdline[0] if p.get("process_cmdline") and len(p.process_cmdline) == 1 else p.get("process_cmdline")
-    )
-    print(f"  {'  '*(depth+1)}{command_line}  | {p.process_guid}")
+        command_line = (
+            p.process_cmdline[0]
+            if p.get("process_cmdline") and len(p.get("process_cmdline")) == 1
+            else p.get("process_cmdline")
+        )
+        print(f"  {'  '*(depth+1)}{command_line}  | {p.get('process_guid')}")
+    else:
+        process_name = get_os_independent_filepath(p.get("childproc_name", "None")).name
+        command_line = p.get("childproc_cmdline") if p.get("childproc_cmdline") else p.get("childproc_name")
+        print(
+            f"  {'  '*(depth+1)}@{as_configured_timezone(p.get('event_timestamp'))}: {process_name}: {command_line}  | {p.get('childproc_process_guid')}"
+        )
 
     try:
-        for child in p.children:
+        for child in yield_events(p, criteria={"event_type": ["childproc"]}, start_time=start_time, end_time=end_time):
+            child["_cb"] = p.get("_cb")
+            child["process_guid"] = child.get("childproc_process_guid")
             print_process_tree(child, max_depth=max_depth, depth=depth + 1)
     except RecursionError:
         LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
@@ -532,7 +548,7 @@ def inspect_process_tree(
 
     if depth == 0:
         print_ancestry(proc)
-        print_process_tree(proc)
+        print_process_tree(proc, start_time=start_time, end_time=end_time)
 
     process_name = get_os_independent_filepath(proc.get("process_name", "None")).name
     print(f"\n+ {process_name} - {proc.process_guid}")
