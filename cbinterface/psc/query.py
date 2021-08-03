@@ -6,7 +6,7 @@ import time
 import datetime
 import logging
 
-from typing import Dict, List
+from typing import Union, Dict, List
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
@@ -19,7 +19,7 @@ LOGGER = logging.getLogger("cbinterface.psc.query")
 
 
 def create_event_search(
-    p: Process,
+    p: Union[Process, Dict],
     search_data: Dict = {},
     criteria: Dict = {},
     fields: List = ["*"],
@@ -31,10 +31,14 @@ def create_event_search(
 ) -> Dict:
     """Perform an event search.
 
+    NOTE: If p is a dictionary, an instance of CBC API must be passed as "_cb".
+
     Without anything specified, the default is to return ALL events for the process.
     """
     # NOTE that this one is not job based search.
-    url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
+
+    cb = p.get("_cb")
+    url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
 
     if not search_data:
         if not query:
@@ -52,7 +56,7 @@ def create_event_search(
             search_data["time_range"] = time_range
 
     try:
-        result = p._cb.post_object(url, search_data)
+        result = cb.post_object(url, search_data)
         return result.json()
     except ServerError as e:
         LOGGER.error(f"Caught ServerError searching events: {e}")

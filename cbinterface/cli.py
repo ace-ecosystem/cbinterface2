@@ -121,13 +121,13 @@ def main():
         "-s",
         "--start-time",
         action="store",
-        help="Start time of the process.  Format:'Y-m-d H:M:S' UTC",
+        help="Start time of the process.  Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_query.add_argument(
         "-e",
         "--last-time",
         action="store",
-        help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' UTC",
+        help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_query.add_argument(
         "-nw",
@@ -227,13 +227,13 @@ def main():
         "-st",
         "--start-time",
         action="store",
-        help="Return events that occurred AFTER this start time.  Format:'Y-m-d H:M:S' UTC",
+        help="Return events that occurred AFTER this start time.  Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_inspect.add_argument(
         "-et",
         "--end-time",
         action="store",
-        help="Return events that occurred BEFORE this end time. Format:'Y-m-d H:M:S' UTC",
+        help="Return events that occurred BEFORE this end time. Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
 
     # live response parser
