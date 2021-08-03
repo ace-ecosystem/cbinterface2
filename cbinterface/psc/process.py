@@ -218,9 +218,7 @@ def print_process_tree(
     else:
         process_name = get_os_independent_filepath(p.get("childproc_name", "None")).name
         command_line = p.get("childproc_cmdline") if p.get("childproc_cmdline") else p.get("childproc_name")
-        print(
-            f"  {'  '*(depth+1)}@{as_configured_timezone(p.get('event_timestamp'))}: {process_name}: {command_line}  | {p.get('childproc_process_guid')}"
-        )
+        print(f"  {'  '*(depth+1)}{process_name}:  {command_line}  | {p.get('childproc_process_guid')}")
 
     try:
         for child in yield_events(p, criteria={"event_type": ["childproc"]}, start_time=start_time, end_time=end_time):
