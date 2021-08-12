@@ -629,6 +629,95 @@ def get_feed_report(cb: CbThreatHunterAPI, feed_id: str, report_id: str) -> Dict
         LOGGER.warning(f"No feed {feed_id} or report {report_id} in the feed")
 
 
+"""
+Begin Intel backup routines.
+"""
+
+
+def _safe_filename(raw_string):
+    import string
+
+    raw_string = raw_string.replace(" ", "_")
+    valid_chars = ["_", "-"]
+    valid_chars.extend(list(string.digits))
+    valid_chars.extend(list(string.ascii_lowercase))
+    valid_chars.extend(list(string.ascii_uppercase))
+    safe_string = ""
+    for char in raw_string:
+        if char in valid_chars:
+            safe_string += char
+    return safe_string
+
+
+def backup_watchlist_threat_reports(cb: CbThreatHunterAPI, watchlist_ids: List):
+    """Backup threat reports for safe keeping.
+
+    Write threat report json to local directory for each watchlist ID.
+
+    Args:
+      cb: Cb PSC object
+      watchlist_ids: List of CBC watchlist IDs to backup.
+    Returns:
+      True on success.
+    """
+    from pathlib import Path
+    from cbinterface.config import get_data_directory
+
+    data_dir = get_data_directory()
+    if not os.path.exists(data_dir):
+        LOGGER.warning(f"{data_dir} does not exist. using current working directory.")
+        data_dir = "."
+
+    backup_dir = os.path.join(data_dir, "cbc_intel")
+    Path(backup_dir).mkdir(parents=True, exist_ok=True)
+
+    file_paths = []
+    for watchlist_id in watchlist_ids:
+        watchlist = get_watchlist(cb, watchlist_id)
+        if not watchlist:
+            continue
+
+        wl_dir = _safe_filename(watchlist["name"])
+        wl_dir += ".wl"
+        wl_dir = os.path.join(backup_dir, wl_dir)
+        Path(wl_dir).mkdir(parents=True, exist_ok=True)
+
+        watchlist_path = os.path.join(wl_dir, "watchlist.json")
+        with open(watchlist_path, "w") as fp:
+            fp.write(json.dumps(watchlist))
+            file_paths.append(watchlist_path)
+
+        report_ids = watchlist.get("report_ids")
+        if report_ids:
+            for report_id in report_ids:
+                report = get_report(cb, report_id)
+                report_filename = _safe_filename(report["title"]) + ".json"
+                report_filepath = os.path.join(wl_dir, report_filename)
+                with open(report_filepath, "w") as fp:
+                    fp.write(json.dumps(report))
+                    file_paths.append(report_filepath)
+
+        classifier = watchlist.get("classifier")
+        if classifier and classifier.get("key") == "feed_id":
+            feed_id = classifier["value"]
+            feed = get_feed(cb, feed_id)
+            if not feed or not feed.get("feedinfo"):
+                continue
+            feed_name = _safe_filename(feed["feedinfo"]["name"]) + ".feed.json"
+            feed_filepath = os.path.join(wl_dir, feed_name)
+            with open(feed_filepath, "w") as fp:
+                fp.write(json.dumps(feed))
+                file_paths.append(feed_filepath)
+
+    for fp in file_paths:
+        if os.path.exists(fp):
+            LOGGER.info(f"wrote {fp}")
+        else:
+            LOGGER.error(f"failed to write {fp}")
+
+    return file_paths
+
+
 ## Begin Response to PSC EDR Watchlist Migrations ##
 def yield_reports_created_from_response_watchlists(
     cb: CbThreatHunterAPI, response_watchlists: List[Dict]

@@ -53,6 +53,7 @@ from cbinterface.psc.intel import (
     activate_ioc,
     create_new_report_and_append_to_watchlist,
     write_basic_report_template,
+    backup_watchlist_threat_reports,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -107,7 +108,12 @@ from cbinterface.psc.sessions import (
     close_session_by_id,
 )
 from cbinterface.psc.enumerations import logon_history
-from cbinterface.config import get_playbook_map
+from cbinterface.config import (
+    get_playbook_map,
+    add_watchlist_id_to_intel_backup_list,
+    remove_watchlist_id_from_intel_backup_list,
+    get_intel_backup_watchlist_list,
+)
 from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
@@ -241,6 +247,18 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
     parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
+    parser_intel.add_argument(
+        "--backup",
+        action="store_true",
+        dest="intel_backup",
+        help="Download a copy of this watchlist and its threat reports.",
+    )
+    parser_intel.add_argument(
+        "--track-watchlist-id", action="store", help="Track this watchlist via configuration for backups."
+    )
+    parser_intel.add_argument(
+        "--untrack-watchlist-id", action="store", help="Remove this watchlist from the tracking list for backups."
+    )
 
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
 
@@ -432,6 +450,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
     # Intel #
     if args.command == "intel":
+        if args.intel_backup:
+            watchlist_ids = get_intel_backup_watchlist_list()
+            if not watchlist_ids:
+                LOGGER.info("No watchlists configured for intel backup tracking.")
+                return None
+            return backup_watchlist_threat_reports(cb, watchlist_ids)
+        if args.track_watchlist_id:
+            return add_watchlist_id_to_intel_backup_list(args.track_watchlist_id)
+        if args.untrack_watchlist_id:
+            return remove_watchlist_id_from_intel_backup_list(args.untrack_watchlist_id)
+
         if args.intel_command == "alerts":
 
             if args.intel_alerts_command == "search":  #'device_name': ['XW7R17'],
