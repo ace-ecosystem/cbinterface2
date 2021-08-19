@@ -17,6 +17,9 @@ from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.query")
 
+# NOTE: To receive all events, you must resubmit the search request until processed_segments is equal to total_segments.
+# https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#get-events-associated-with-a-given-process-v2
+MAX_EVENT_SEARCH_SEGMENT_EXTENSION = 10
 
 def create_event_search(
     p: Union[Process, Dict],
@@ -115,6 +118,7 @@ def yield_events(
 
     position = start
     still_querying = True
+    search_extension_count = 0
     while still_querying:
         result = create_event_search(
             p,
@@ -148,11 +152,19 @@ def yield_events(
                 break
         if position >= total_results:
             if result.get("processed_segments") != result.get("total_segments"):
-                LOGGER.warning(
-                    f"got all available events but CBC reports that all process segments have not been processed."
+                # NOTE: This can happen when CBC is bogged down, however, it also may be the process hasn't terminated.
+                # Usually this will complete on the first extension/second try.
+
+                if search_extension_count >= MAX_EVENT_SEARCH_SEGMENT_EXTENSION:
+                    still_querying = False
+                    break
+                search_extension_count += 1
+                remaining = MAX_EVENT_SEARCH_SEGMENT_EXTENSION - search_extension_count
+                LOGGER.info(
+                    f"CBC hasn't processed all segments. There could be more events. Extending search up to {remaining} more times ... "
                 )
-            still_querying = False
-            break
+            else:
+                still_querying = False
 
 
 def get_process_search_jobs(cb):
