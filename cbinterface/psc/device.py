@@ -17,11 +17,27 @@ from cbinterface.helpers import as_configured_timezone
 
 LOGGER = logging.getLogger("cbinterface.psc.device")
 
-DEVICE_STATUSES = ["PENDING", "REGISTERED", "UNINSTALLED", "DEREGISTERED", "ACTIVE", "INACTIVE", "ERROR", "ALL", "BYPASS_ON", "BYPASS", "QUARANTINE", "SENSOR_OUTOFDATE", "DELETED", "LIVE"]
+DEVICE_STATUSES = [
+    "PENDING",
+    "REGISTERED",
+    "UNINSTALLED",
+    "DEREGISTERED",
+    "ACTIVE",
+    "INACTIVE",
+    "ERROR",
+    "ALL",
+    "BYPASS_ON",
+    "BYPASS",
+    "QUARANTINE",
+    "SENSOR_OUTOFDATE",
+    "DELETED",
+    "LIVE",
+]
 
-def export_devices(cb: CbThreatHunterAPI, device_status: str="ALL"):
+
+def export_devices(cb: CbThreatHunterAPI, device_status: str = "ALL"):
     """Export devices with the given status to a CSV.
-    
+
     Note device fields returned are limited. Use device search for all details.
     """
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/devices/_search/download?status={device_status}"
@@ -36,6 +52,7 @@ def export_devices(cb: CbThreatHunterAPI, device_status: str="ALL"):
     except ClientError as e:
         LOGGER.warning(f"got ClientError: {e}")
         return False
+
 
 def device_search(
     cb: CbThreatHunterAPI,
@@ -53,8 +70,8 @@ def device_search(
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/devices/_search"
 
     if not search_data:
-        if time_range and 'last_contact_time' not in criteria:
-            criteria['last_contact_time'] = time_range
+        if time_range and "last_contact_time" not in criteria:
+            criteria["last_contact_time"] = time_range
         search_data = {
             "criteria": criteria,
             "exclusions": exclusions,
@@ -77,6 +94,7 @@ def device_search(
         LOGGER.warning(f"got unexpected {result}")
         return False
 
+
 def yield_devices(
     cb: CbThreatHunterAPI,
     search_data: Dict = {},
@@ -88,7 +106,7 @@ def yield_devices(
     start: int = 0,
     start_time: datetime.datetime = None,
     end_time: datetime.datetime = None,
-    time_range_string: str= None,
+    time_range_string: str = None,
     max_results: int = None,  # limit results returned
 ) -> Dict:
     """Yield Alerts resulting from alert search."""
@@ -136,6 +154,7 @@ def yield_devices(
         if position >= total_results:
             still_querying = False
             break
+
 
 def is_device_online(d: Device) -> bool:
     """Return True if the device has check in within the last 15 minutes."""

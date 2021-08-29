@@ -21,6 +21,7 @@ LOGGER = logging.getLogger("cbinterface.psc.query")
 # https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#get-events-associated-with-a-given-process-v2
 MAX_EVENT_SEARCH_SEGMENT_EXTENSION = 10
 
+
 def create_event_search(
     p: Union[Process, Dict],
     search_data: Dict = {},

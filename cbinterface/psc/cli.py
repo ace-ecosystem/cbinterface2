@@ -191,7 +191,7 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "--export",
         action="store_true",
         default=False,
-        help="Export devices by status. WARNING: dumps json to console! Example: `cbinterface d ALL --export` would export 'ALL' devices."
+        help="Export devices by status. WARNING: dumps json to console! Example: `cbinterface d ALL --export` would export 'ALL' devices.",
     )
 
     # UBS parser
@@ -723,7 +723,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if args.all_details:
                     print()
                     print(device)
-                #elif args.json:
+                # elif args.json:
                 #    print(json.dumps(device._info, indent=2))
                 else:
                     print(device_info(device))

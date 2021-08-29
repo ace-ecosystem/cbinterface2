@@ -152,6 +152,7 @@ def convert_csv_data_to_dictionary(csv_data: str):
     """Convert CSV content to a dictionary representation."""
     import csv
     from io import StringIO
+
     csv_data_stream = StringIO(csv_data)
     csvReader = csv.DictReader(csv_data_stream)
     json_data = [dict(row) for row in csvReader]
