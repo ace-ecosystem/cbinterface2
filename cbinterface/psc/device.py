@@ -4,16 +4,138 @@
 import datetime
 import logging
 
-from typing import Union
+from typing import Dict
 
 from cbapi.psc import Device
 from cbapi.psc.threathunter import CbThreatHunterAPI
 from cbapi.psc.devices_query import DeviceSearchQuery
+from cbapi.errors import ServerError, ClientError
+
+from cbinterface.helpers import convert_csv_data_to_dictionary
 
 from cbinterface.helpers import as_configured_timezone
 
 LOGGER = logging.getLogger("cbinterface.psc.device")
 
+DEVICE_STATUSES = ["PENDING", "REGISTERED", "UNINSTALLED", "DEREGISTERED", "ACTIVE", "INACTIVE", "ERROR", "ALL", "BYPASS_ON", "BYPASS", "QUARANTINE", "SENSOR_OUTOFDATE", "DELETED", "LIVE"]
+
+def export_devices(cb: CbThreatHunterAPI, device_status: str="ALL"):
+    """Export devices with the given status to a CSV.
+    
+    Note device fields returned are limited. Use device search for all details.
+    """
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/devices/_search/download?status={device_status}"
+    try:
+        result = cb.get_raw_data(url)
+        if not result:
+            return result
+        return convert_csv_data_to_dictionary(result)
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError: {e}")
+        return False
+    except ClientError as e:
+        LOGGER.warning(f"got ClientError: {e}")
+        return False
+
+def device_search(
+    cb: CbThreatHunterAPI,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    exclusions: Dict = {},
+    query: str = None,
+    time_range: Dict = {},
+    rows=1000,
+    start: int = 0,
+    sort: Dict = [{"field": "last_contact_time", "order": "asc"}],
+) -> Dict:
+    """Device search"""
+
+    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/devices/_search"
+
+    if not search_data:
+        if time_range and 'last_contact_time' not in criteria:
+            criteria['last_contact_time'] = time_range
+        search_data = {
+            "criteria": criteria,
+            "exclusions": exclusions,
+            "query": query,
+            "rows": rows,
+            "start": start,
+            "sort": sort,
+        }
+
+    try:
+        result = cb.post_object(url, search_data)
+        return result.json()
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError searching events: {e}")
+        return False
+    except ClientError as e:
+        LOGGER.warning(f"got ClientError searching events: {e}")
+        return False
+    except ValueError:
+        LOGGER.warning(f"got unexpected {result}")
+        return False
+
+def yield_devices(
+    cb: CbThreatHunterAPI,
+    search_data: Dict = {},
+    criteria: Dict = {},
+    exclusions: Dict = {},
+    query: str = None,
+    rows=1000,
+    sort: Dict = [{"field": "last_contact_time", "order": "asc"}],
+    start: int = 0,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+    time_range_string: str= None,
+    max_results: int = None,  # limit results returned
+) -> Dict:
+    """Yield Alerts resulting from alert search."""
+
+    time_range = {}
+    if time_range_string:
+        time_range["range"] = f"-{time_range_string}"
+    else:
+        if start_time:
+            time_range["start"] = start_time.isoformat()
+        if end_time:
+            time_range["end"] = end_time.isoformat()
+
+    position = start
+    still_querying = True
+    while still_querying:
+        if max_results and position + rows > max_results:
+            # get however many rows that may result in max_results
+            rows = max_results - position
+        result = device_search(
+            cb,
+            search_data=search_data,
+            criteria=criteria,
+            exclusions=exclusions,
+            query=query,
+            time_range=time_range,
+            rows=rows,
+            sort=sort,
+            start=position,
+        )
+
+        if not result:
+            return result
+
+        total_results = result["num_found"]
+        results = result.get("results", [])
+        LOGGER.info(f"got {len(results)+position} out of {total_results} total device results.")
+        for item in results:
+            yield item
+            position += 1
+            if max_results and position >= max_results:
+                still_querying = False
+                break
+
+        if position >= total_results:
+            still_querying = False
+            break
 
 def is_device_online(d: Device) -> bool:
     """Return True if the device has check in within the last 15 minutes."""

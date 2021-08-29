@@ -61,6 +61,7 @@ from cbinterface.psc.device import (
     time_since_checkin,
     find_device_by_hostname,
     is_device_online,
+    yield_devices,
 )
 from cbinterface.psc.process import (
     select_process,
@@ -185,6 +186,12 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="UN-Quarantine the devices returned by the query.",
+    )
+    parser_sensor.add_argument(
+        "--export",
+        action="store_true",
+        default=False,
+        help="Export devices by status. WARNING: dumps json to console! Example: `cbinterface d ALL --export` would export 'ALL' devices."
     )
 
     # UBS parser
@@ -682,6 +689,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             LOGGER.error("quarantine AND un-quarantine? 🤨 Won't do it.")
             return False
 
+        if args.export:
+            # NOTE: TODO: update device search functionality to use the new direct api method and
+            LOGGER.info(f"attempting to export devices resulting from query: {args.device_query}")
+
+            devices = [device for device in yield_devices(cb, query=args.device_query)]
+            if not devices:
+                LOGGER.warning("No devices returned.")
+                return devices
+            print(json.dumps(devices))
+            return True
+
         devices = make_device_query(cb, args.device_query)
         if not devices:
             return None
@@ -705,6 +723,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if args.all_details:
                     print()
                     print(device)
+                #elif args.json:
+                #    print(json.dumps(device._info, indent=2))
                 else:
                     print(device_info(device))
             print()

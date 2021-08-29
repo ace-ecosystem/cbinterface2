@@ -1,7 +1,6 @@
 """Helper functions for common actions.
 """
 
-import os
 import re
 import sys
 import signal
@@ -147,3 +146,13 @@ def create_histogram_string(data: dict) -> str:
             "\u25A0" * (int(r[2] / 2)),
         )
     return txt
+
+
+def convert_csv_data_to_dictionary(csv_data: str):
+    """Convert CSV content to a dictionary representation."""
+    import csv
+    from io import StringIO
+    csv_data_stream = StringIO(csv_data)
+    csvReader = csv.DictReader(csv_data_stream)
+    json_data = [dict(row) for row in csvReader]
+    return json_data
