@@ -120,7 +120,7 @@ def set_default_cbapi_product(env_product: str):
 
 def get_default_cbapi_product():
     """ Get CbAPI product."""
-    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "response")
+    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "psc")
 
 
 def set_default_cbapi_profile(profile: str):
@@ -206,7 +206,7 @@ if "CBINTERFACE_TIMEZONE" not in os.environ:
     set_timezone(CONFIG.get("default", "time_zone", fallback="GMT"))
 
 if "CBINTERFACE_DEFAULT_CBAPI_PRODUCT" not in os.environ:
-    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="response"))
+    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="psc"))
 
 if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
     set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))

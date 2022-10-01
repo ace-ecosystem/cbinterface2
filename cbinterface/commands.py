@@ -38,7 +38,8 @@ class BaseSessionCommand:
     def fill_placeholders(self, string_item: str, placeholders={}):
         # fill common placeholders
         placeholders = placeholders if placeholders else self.placeholders
-        placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", self.hostname)
+        hostname = self.hostname[self.hostname.rfind('\\')+1:] if '\\' in self.hostname else self.hostname
+        placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)
         placeholders["WORK_DIR"] = placeholders.get("WORK_DIR", "C:\\Program Files")
