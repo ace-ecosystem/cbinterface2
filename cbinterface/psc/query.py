@@ -6,7 +6,7 @@ import time
 import datetime
 import logging
 
-from typing import Dict, List
+from typing import Union, Dict, List
 
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
@@ -17,9 +17,13 @@ from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.query")
 
+# NOTE: To receive all events, you must resubmit the search request until processed_segments is equal to total_segments.
+# https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#get-events-associated-with-a-given-process-v2
+MAX_EVENT_SEARCH_SEGMENT_EXTENSION = 10
+
 
 def create_event_search(
-    p: Process,
+    p: Union[Process, Dict],
     search_data: Dict = {},
     criteria: Dict = {},
     fields: List = ["*"],
@@ -27,24 +31,36 @@ def create_event_search(
     time_range: Dict = {},
     rows=1000,
     start: int = 0,
+    sort: Dict = [{"field": "event_timestamp", "order": "asc"}],
 ) -> Dict:
     """Perform an event search.
+
+    NOTE: If p is a dictionary, an instance of CBC API must be passed as "_cb".
 
     Without anything specified, the default is to return ALL events for the process.
     """
     # NOTE that this one is not job based search.
-    url = f"/api/investigate/v2/orgs/{p._cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
+
+    cb = p.get("_cb")
+    url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/events/{p.get('process_guid')}/_search"
 
     if not search_data:
         if not query:
             query = f"process_guid:{p.get('process_guid')}"
-        search_data = {"criteria": criteria, "fields": fields, "query": query, "rows": rows, "start": start}
+        search_data = {
+            "criteria": criteria,
+            "fields": fields,
+            "query": query,
+            "rows": rows,
+            "start": start,
+            "sort": sort,
+        }
         if time_range:
             # "time_range" = { "end": "2020-01-27T18:34:04Z", "start": "2020-01-18T18:34:04Z"}
             search_data["time_range"] = time_range
 
     try:
-        result = p._cb.post_object(url, search_data)
+        result = cb.post_object(url, search_data)
         return result.json()
     except ServerError as e:
         LOGGER.error(f"Caught ServerError searching events: {e}")
@@ -103,6 +119,7 @@ def yield_events(
 
     position = start
     still_querying = True
+    search_extension_count = 0
     while still_querying:
         result = create_event_search(
             p,
@@ -136,11 +153,19 @@ def yield_events(
                 break
         if position >= total_results:
             if result.get("processed_segments") != result.get("total_segments"):
-                LOGGER.warning(
-                    f"got all available events but CBC reports that all process segments have not been processed."
+                # NOTE: This can happen when CBC is bogged down, however, it also may be the process hasn't terminated.
+                # Usually this will complete on the first extension/second try.
+
+                if search_extension_count >= MAX_EVENT_SEARCH_SEGMENT_EXTENSION:
+                    still_querying = False
+                    break
+                search_extension_count += 1
+                remaining = MAX_EVENT_SEARCH_SEGMENT_EXTENSION - search_extension_count
+                LOGGER.info(
+                    f"CBC hasn't processed all segments. There could be more events. Extending search up to {remaining} more times ... "
                 )
-            still_querying = False
-            break
+            else:
+                still_querying = False
 
 
 def get_process_search_jobs(cb):

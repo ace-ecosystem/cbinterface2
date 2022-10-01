@@ -53,6 +53,7 @@ from cbinterface.psc.intel import (
     activate_ioc,
     create_new_report_and_append_to_watchlist,
     write_basic_report_template,
+    backup_watchlist_threat_reports,
 )
 from cbinterface.psc.device import (
     make_device_query,
@@ -60,6 +61,7 @@ from cbinterface.psc.device import (
     time_since_checkin,
     find_device_by_hostname,
     is_device_online,
+    yield_devices,
 )
 from cbinterface.psc.process import (
     select_process,
@@ -107,7 +109,12 @@ from cbinterface.psc.sessions import (
     close_session_by_id,
 )
 from cbinterface.psc.enumerations import logon_history
-from cbinterface.config import get_playbook_map
+from cbinterface.config import (
+    get_playbook_map,
+    add_watchlist_id_to_intel_backup_list,
+    remove_watchlist_id_from_intel_backup_list,
+    get_intel_backup_watchlist_list,
+)
 from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
 LOGGER = logging.getLogger("cbinterface.psc.cli")
@@ -180,6 +187,12 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         default=False,
         help="UN-Quarantine the devices returned by the query.",
     )
+    parser_sensor.add_argument(
+        "--export",
+        action="store_true",
+        default=False,
+        help="Export devices by status. WARNING: dumps json to console! Example: `cbinterface d ALL --export` would export 'ALL' devices.",
+    )
 
     # UBS parser
     parser_ubs = subparsers.add_parser(
@@ -241,6 +254,18 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     # intel parser
     parser_intel = subparsers.add_parser("intel", help="Intel Feeds, Watchlists, Reports, & IOCs")
     parser_intel.add_argument("--json", action="store_true", help="Return results as JSON.")
+    parser_intel.add_argument(
+        "--backup",
+        action="store_true",
+        dest="intel_backup",
+        help="Download a copy of this watchlist and its threat reports.",
+    )
+    parser_intel.add_argument(
+        "--track-watchlist-id", action="store", help="Track this watchlist via configuration for backups."
+    )
+    parser_intel.add_argument(
+        "--untrack-watchlist-id", action="store", help="Remove this watchlist from the tracking list for backups."
+    )
 
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
 
@@ -432,6 +457,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
     # Intel #
     if args.command == "intel":
+        if args.intel_backup:
+            watchlist_ids = get_intel_backup_watchlist_list()
+            if not watchlist_ids:
+                LOGGER.info("No watchlists configured for intel backup tracking.")
+                return None
+            return backup_watchlist_threat_reports(cb, watchlist_ids)
+        if args.track_watchlist_id:
+            return add_watchlist_id_to_intel_backup_list(args.track_watchlist_id)
+        if args.untrack_watchlist_id:
+            return remove_watchlist_id_from_intel_backup_list(args.untrack_watchlist_id)
+
         if args.intel_command == "alerts":
 
             if args.intel_alerts_command == "search":  #'device_name': ['XW7R17'],
@@ -653,6 +689,17 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             LOGGER.error("quarantine AND un-quarantine? 🤨 Won't do it.")
             return False
 
+        if args.export:
+            # NOTE: TODO: update device search functionality to use the new direct api method and
+            LOGGER.info(f"attempting to export devices resulting from query: {args.device_query}")
+
+            devices = [device for device in yield_devices(cb, query=args.device_query)]
+            if not devices:
+                LOGGER.warning("No devices returned.")
+                return devices
+            print(json.dumps(devices))
+            return True
+
         devices = make_device_query(cb, args.device_query)
         if not devices:
             return None
@@ -676,6 +723,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if args.all_details:
                     print()
                     print(device)
+                # elif args.json:
+                #    print(json.dumps(device._info, indent=2))
                 else:
                     print(device_info(device))
             print()
@@ -684,12 +733,15 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     # Process Quering #
     if args.command and (args.command.startswith("q") or args.command == "pq"):
         LOGGER.info(f"searching {args.environment} environment..")
+
+        # format datetimes as needed
+        format_string = "%Y-%m-%d %H:%M:%S"
+        if args.start_time and "T" in args.start_time or args.last_time and "T" in args.last_time:
+            format_string = "%Y-%m-%dT%H:%M:%S"
         args.start_time = (
-            datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S") if args.start_time else args.start_time
+            datetime.datetime.strptime(args.start_time, format_string) if args.start_time else args.start_time
         )
-        args.last_time = (
-            datetime.datetime.strptime(args.last_time, "%Y-%m-%d %H:%M:%S") if args.last_time else args.last_time
-        )
+        args.last_time = datetime.datetime.strptime(args.last_time, format_string) if args.last_time else args.last_time
         processes = make_process_query(
             cb,
             args.query,
@@ -752,13 +804,16 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             return False
 
         # format datetimes as needed
+        format_string = "%Y-%m-%d %H:%M:%S"
+        if args.start_time and "T" in args.start_time or args.end_time and "T" in args.end_time:
+            format_string = "%Y-%m-%dT%H:%M:%S"
         args.start_time = (
-            datetime.datetime.strptime(args.start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+            datetime.datetime.strptime(args.start_time, format_string).replace(tzinfo=tz.gettz("GMT"))
             if args.start_time
             else args.start_time
         )
         args.end_time = (
-            datetime.datetime.strptime(args.end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz.gettz("GMT"))
+            datetime.datetime.strptime(args.end_time, format_string).replace(tzinfo=tz.gettz("GMT"))
             if args.end_time
             else args.end_time
         )
@@ -812,7 +867,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_ancestry(proc)
             print()
         if args.inspect_process_tree:
-            print_process_tree(proc)
+            print_process_tree(proc, start_time=args.start_time, end_time=args.end_time)
             print()
         if args.inspect_proc_info:
             print_process_info(proc, raw_print=args.raw_print_events)

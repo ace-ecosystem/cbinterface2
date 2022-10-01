@@ -1,24 +1,19 @@
 # PYTHON_ARGCOMPLETE_OK
 
 import os
-import re
-
-import time
 import argparse
 import argcomplete
 import logging
 import coloredlogs
-import datetime
-import json
+
 import signal
-import yaml
 
 import cbapi.auth
 from cbapi.psc.threathunter import CbThreatHunterAPI
 from cbapi.response import CbResponseAPI
-from cbapi.errors import ConnectionError, UnauthorizedError, ServerError
+from cbapi.errors import ConnectionError, UnauthorizedError, ServerError, CredentialError
 
-from cbinterface.helpers import is_uuid, clean_exit, input_with_timeout
+from cbinterface.helpers import clean_exit
 from cbinterface.config import (
     set_timezone,
     save_configuration,
@@ -77,9 +72,14 @@ def main():
     default_profile_name = get_default_cbapi_profile()
     default_environments = [env for env in environments if env.startswith(default_product_name)]
     default_environment = f"{default_product_name}:{default_profile_name}"
-    default_environment = (
-        default_environment if default_environments and default_environment in default_environments else environments[0]
-    )
+    if environments:
+        default_environment = (
+            default_environment
+            if default_environments and default_environment in default_environments
+            else environments[0]
+        )
+    else:
+        LOGGER.warning("no carbon black configurations found.")
 
     parser = argparse.ArgumentParser(description="Interface to Carbon Black for IDR teams.")
     parser.add_argument("-d", "--debug", action="store_true", help="Turn on debug logging.")
@@ -121,13 +121,13 @@ def main():
         "-s",
         "--start-time",
         action="store",
-        help="Start time of the process.  Format:'Y-m-d H:M:S' UTC",
+        help="Start time of the process.  Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_query.add_argument(
         "-e",
         "--last-time",
         action="store",
-        help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' UTC",
+        help="Narrow to processes with start times BEFORE this end/last time. Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_query.add_argument(
         "-nw",
@@ -227,13 +227,13 @@ def main():
         "-st",
         "--start-time",
         action="store",
-        help="Return events that occurred AFTER this start time.  Format:'Y-m-d H:M:S' UTC",
+        help="Return events that occurred AFTER this start time.  Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
     parser_inspect.add_argument(
         "-et",
         "--end-time",
         action="store",
-        help="Return events that occurred BEFORE this end time. Format:'Y-m-d H:M:S' UTC",
+        help="Return events that occurred BEFORE this end time. Format:'Y-m-d H:M:S' OR 'Y-m-dTH:M:S' UTC",
     )
 
     # live response parser
@@ -445,3 +445,5 @@ def main():
         LOGGER.critical(f"CB ServerError 😒 (try again) : {e}")
     except TimeoutError as e:
         LOGGER.critical(f"TimeoutError waiting for CB server 🙄 (try again) : {e}")
+    except CredentialError as e:
+        LOGGER.critical(f"CredentialError : {e}")

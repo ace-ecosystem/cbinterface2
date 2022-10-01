@@ -24,11 +24,18 @@ CONFIG.read(CONFIG_SEARCH_PATHS)
 
 if not CONFIG.has_section("default"):
     CONFIG.add_section("default")
+if not CONFIG.has_section("intel_backup"):
+    CONFIG.add_section("intel_backup")
 
 if not CONFIG.has_option("default", "max_recursive_depth"):
     CONFIG.set("default", "max_recursive_depth", "50")
 MAX_RECURSIVE_DEPTH = CONFIG.getint("default", "max_recursive_depth")
 # TODO need to actually use max recursive depth and max segments
+
+
+"""
+Begin Management & Helper Functions
+"""
 
 
 def save_configuration(config: ConfigParser = CONFIG, save_path=user_config_path):
@@ -46,60 +53,6 @@ def save_configuration(config: ConfigParser = CONFIG, save_path=user_config_path
         LOGGER.error(f"part of path does not exist: {save_path}")
     if os.path.exists(save_path):
         LOGGER.info(f"saved configuration to: {save_path}")
-
-
-def _is_valid_time_zone(zone: str):
-    """True if zone is a valid time zone."""
-    if zone in list(get_zonefile_instance().zones):
-        return True
-    return False
-
-
-# begin cbinterface timezone
-def set_timezone(time_zone: str):
-    if not _is_valid_time_zone(time_zone):
-        LOGGER.error(f"Not a recongnized time zone: {time_zone}")
-        return False
-    os.environ["CBINTERFACE_TIMEZONE"] = time_zone
-    CONFIG.set("default", "time_zone", time_zone)
-    return True
-
-
-def get_timezone():
-    return tz.gettz(os.environ.get("CBINTERFACE_TIMEZONE", "GMT"))
-
-
-if "CBINTERFACE_TIMEZONE" not in os.environ:
-    # timestamps from Cb are not timezone aware, but they are GMT.
-    set_timezone(CONFIG.get("default", "time_zone", fallback="GMT"))
-
-# begin CbAPI product
-def set_default_cbapi_product(env_product: str):
-    os.environ["CBINTERFACE_DEFAULT_CBAPI_PRODUCT"] = env_product
-    CONFIG.set("default", "cbapi_product", env_product)
-    return True
-
-
-def get_default_cbapi_product():
-    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "response")
-
-
-if "CBINTERFACE_DEFAULT_CBAPI_PRODUCT" not in os.environ:
-    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="response"))
-
-# begin CbAPI profile/environment
-def set_default_cbapi_profile(profile: str):
-    os.environ["CBINTERFACE_DEFAULT_CBAPI_PROFILE"] = profile
-    CONFIG.set("default", "cbapi_profile", profile)
-    return True
-
-
-def get_default_cbapi_profile():
-    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PROFILE", "default")
-
-
-if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
-    set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))
 
 
 def get_playbook_map():
@@ -134,3 +87,129 @@ def get_playbook_map():
         }
 
     return playbook_map
+
+
+def _is_valid_time_zone(zone: str):
+    """True if zone is a valid time zone."""
+    if zone in list(get_zonefile_instance().zones):
+        return True
+    return False
+
+
+def set_timezone(time_zone: str):
+    """Set cbinterface timezone."""
+    if not _is_valid_time_zone(time_zone):
+        LOGGER.error(f"Not a recongnized time zone: {time_zone}")
+        return False
+    os.environ["CBINTERFACE_TIMEZONE"] = time_zone
+    CONFIG.set("default", "time_zone", time_zone)
+    return True
+
+
+def get_timezone():
+    """Get cbinterface timezone."""
+    return tz.gettz(os.environ.get("CBINTERFACE_TIMEZONE", "GMT"))
+
+
+def set_default_cbapi_product(env_product: str):
+    """Set CbAPI product."""
+    os.environ["CBINTERFACE_DEFAULT_CBAPI_PRODUCT"] = env_product
+    CONFIG.set("default", "cbapi_product", env_product)
+    return True
+
+
+def get_default_cbapi_product():
+    """ Get CbAPI product."""
+    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "response")
+
+
+def set_default_cbapi_profile(profile: str):
+    """Set CbAPI profile/environment."""
+    os.environ["CBINTERFACE_DEFAULT_CBAPI_PROFILE"] = profile
+    CONFIG.set("default", "cbapi_profile", profile)
+    return True
+
+
+def get_default_cbapi_profile():
+    """Get CbAPI profile/environment."""
+    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PROFILE", "default")
+
+
+def set_and_establish_data_directory(data_dir_path: str = "."):
+    """Set a default data directory.
+
+    cbinterface will use this directory to save content, such as intel backup files.
+    If not defined, the current working directory will be used.
+
+    If the data directory does not exist, an attempt to create it will execute.
+    """
+    os.environ["CBINTERFACE_DATA_DIR"] = data_dir_path
+    CONFIG.set("default", "data_dir", data_dir_path)
+    if not os.path.exists(data_dir_path):
+        from pathlib import Path
+
+        Path(data_dir_path).mkdir(parents=True, exist_ok=True)
+        if not os.path.exists(data_dir_path):
+            LOGGER.warning(f"failed to create {data_dir_path}")
+            return False
+    return True
+
+
+def get_data_directory():
+    """Get the default data directory."""
+    return os.environ.get("CBINTERFACE_DATA_DIR", ".")
+
+
+def add_watchlist_id_to_intel_backup_list(watchlist_id: str):
+    """Append this valid watchlist ID to the configured backup list.
+
+    This list is used to track watchlists that should be backed up by routines.
+    """
+    watchlist_ids = CONFIG.get("intel_backup", "watchlist_id_list", fallback=[])
+    if watchlist_ids:
+        watchlist_ids = watchlist_ids.split(",")
+    if watchlist_id not in watchlist_ids:
+        watchlist_ids.append(watchlist_id)
+        watchlist_ids = ",".join(watchlist_ids)
+        CONFIG.set("intel_backup", "watchlist_id_list", watchlist_ids)
+        save_configuration()
+    return True
+
+
+def remove_watchlist_id_from_intel_backup_list(watchlist_id: str):
+    """Append this valid watchlist ID to the configured backup list.
+
+    This list is used to track watchlists that should be backed up by routines.
+    """
+    watchlist_ids = CONFIG.get("intel_backup", "watchlist_id_list", fallback="").split(",")
+    if watchlist_id in watchlist_ids:
+        watchlist_ids.remove(watchlist_id)
+        watchlist_ids = ",".join(watchlist_ids)
+        CONFIG.set("intel_backup", "watchlist_id_list", watchlist_ids)
+        save_configuration()
+    return True
+
+
+def get_intel_backup_watchlist_list():
+    """Get the list of watchlist IDs that are tracked."""
+    watchlist_ids = CONFIG.get("intel_backup", "watchlist_id_list", fallback=[])
+    if watchlist_ids:
+        watchlist_ids = watchlist_ids.split(",")
+    return watchlist_ids
+
+
+"""
+Set variables.
+"""
+if "CBINTERFACE_TIMEZONE" not in os.environ:
+    # timestamps from Cb are not timezone aware, but they are GMT.
+    set_timezone(CONFIG.get("default", "time_zone", fallback="GMT"))
+
+if "CBINTERFACE_DEFAULT_CBAPI_PRODUCT" not in os.environ:
+    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="response"))
+
+if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
+    set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))
+
+if "CBINTERFACE_DATA_DIR" not in os.environ:
+    set_and_establish_data_directory(CONFIG.get("default", "data_dir", fallback="."))

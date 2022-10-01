@@ -107,7 +107,7 @@ def process_to_dict(
 
     process["process_tree"] = StringIO()
     with redirect_stdout(process["process_tree"]):
-        print_process_tree(p)
+        print_process_tree(p, start_time=start_time, end_time=end_time)
     process["process_tree"] = process["process_tree"].getvalue()
 
     return process
@@ -190,26 +190,40 @@ def print_ancestry(p: Process, max_depth=0, depth=0):
             print_ancestry(parent, max_depth=max_depth, depth=depth + 1)
 
 
-def print_process_tree(p: Process, max_depth=0, depth=0):
+def print_process_tree(
+    p: Union[Process, Dict],
+    max_depth=0,
+    depth=0,
+    start_time: datetime.datetime = None,
+    end_time: datetime.datetime = None,
+):
     """Print the process tree."""
 
     if max_depth and depth > max_depth:
         return
 
     if depth == 0:
-        if not is_process_loaded(p):
-
+        if isinstance(p, Process) and not is_process_loaded(p):
             p = load_process(p)
+
         print("\n------ Process Execution Tree ------")
         print()
 
-    command_line = (
-        p.process_cmdline[0] if p.get("process_cmdline") and len(p.process_cmdline) == 1 else p.get("process_cmdline")
-    )
-    print(f"  {'  '*(depth+1)}{command_line}  | {p.process_guid}")
+        command_line = (
+            p.process_cmdline[0]
+            if p.get("process_cmdline") and len(p.get("process_cmdline")) == 1
+            else p.get("process_cmdline")
+        )
+        print(f"  {'  '*(depth+1)}{command_line}  | {p.get('process_guid')}")
+    else:
+        process_name = get_os_independent_filepath(p.get("childproc_name", "None")).name
+        command_line = p.get("childproc_cmdline") if p.get("childproc_cmdline") else p.get("childproc_name")
+        print(f"  {'  '*(depth+1)}{process_name}:  {command_line}  | {p.get('childproc_process_guid')}")
 
     try:
-        for child in p.children:
+        for child in yield_events(p, criteria={"event_type": ["childproc"]}, start_time=start_time, end_time=end_time):
+            child["_cb"] = p.get("_cb")
+            child["process_guid"] = child.get("childproc_process_guid")
             print_process_tree(child, max_depth=max_depth, depth=depth + 1)
     except RecursionError:
         LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
@@ -230,15 +244,15 @@ def get_events_by_type(
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
         fileless_scriptload, netconn_proxy
     """
-    from cbinterface.psc.query import yield_events
 
     if isinstance(p, dict):
-        # processing from json file
+        # processing from json file.
+        # NOTE time frame is not enforced here as we assume that happend when the json was written.
         assert "events" in p
-        events = []
         for event_type in event_types:
-            events.extend(p["events"].get(event_type, []))
-        return events
+            for event in p["events"].get(event_type, []):
+                yield event
+        return
 
     try:
         # NOTE: when there are thousands of events... this under-the-hood will get ALL of them before returning..
@@ -251,7 +265,7 @@ def get_events_by_type(
                 yield Event(p._cb, initial_data=event)
     except Exception as e:
         LOGGER.error(f"failed to get events: {e}")
-        return []
+        return
 
 
 def format_filemod(fm: Union[Event, Dict]):
@@ -370,7 +384,7 @@ def format_regmod(rm: Union[Event, Dict]):
         action = "Created"
     elif action == "WRITE_VALUE":
         action = "Modified"
-    return f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}\n"
+    return f" @{as_configured_timezone(rm.get('event_timestamp'))}: {action}: {rm.get('regmod_name')}"
 
 
 def print_regmods(
@@ -394,10 +408,10 @@ def format_scriptload(sl: Union[Event, Dict]):
     """Format scriptload event into single line."""
     if sl.get("event_type") == "scriptload":
         pub_state = ",".join([state[len("FILE_SIGNATURE_") :] for state in sl.get("scriptload_publisher_state", [])])
-        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}\n"
+        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('scriptload_name')} , sha256={sl.get('scriptload_sha256')} - {pub_state}"
 
     if sl.get("event_type") == "fileless_scriptload":
-        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('fileless_scriptload_cmdline')}\n"
+        return f" @{as_configured_timezone(sl.get('event_timestamp'))}: {sl.get('fileless_scriptload_cmdline')}"
 
 
 def print_scriptloads(
@@ -427,7 +441,7 @@ def format_modload(ml: Union[Event, Dict]):
     ml_pub_state_summary = (
         "_".join([state[len("FILE_SIGNATURE_STATE") + 1 :] for state in ml.get("modload_publisher_state", [])]) or ""
     )
-    return f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}\n"
+    return f" @{as_configured_timezone(ml.get('event_timestamp'))}: {ml.get('modload_name')} , md5:{ml.get('modload_md5')} - {ml.get('modload_publisher')}: {ml_pub_state_summary}"
 
 
 def print_modloads(
@@ -453,7 +467,7 @@ def format_crossproc(cp: Union[Event, Dict]):
     inverse_target = "from" if cp.get("crossproc_target") is True else "to"
     direction = "<-" if cp.get("crossproc_target") is True else "->"
     proc_guid_direction = f"{cp.get('process_guid')} {direction} {cp.get('crossproc_process_guid')}"
-    return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}\n"
+    return f" @{as_configured_timezone(cp.get('event_timestamp'))}: {actions} {inverse_target} {cp.get('crossproc_name')} ({cp.get('crossproc_sha256')}) | {proc_guid_direction}"
 
 
 def print_crossprocs(
@@ -532,7 +546,7 @@ def inspect_process_tree(
 
     if depth == 0:
         print_ancestry(proc)
-        print_process_tree(proc)
+        print_process_tree(proc, start_time=start_time, end_time=end_time)
 
     process_name = get_os_independent_filepath(proc.get("process_name", "None")).name
     print(f"\n+ {process_name} - {proc.process_guid}")
