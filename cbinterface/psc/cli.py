@@ -1,4 +1,4 @@
-"""PSC Threathunter CLI functions."""
+"""Enterprise EDR CLI functions."""
 
 import os
 import sys
@@ -12,13 +12,13 @@ from dateutil import tz
 
 from typing import List, Union
 
-from cbapi import __file__ as cbapi_file_path
+from cbc_sdk import __file__ as cbc_sdk_file_path
+from cbc_sdk.platform.device import Device, DeviceSearchQuery
 from cbapi.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
-from cbapi.psc import Device
-from cbapi.psc.devices_query import DeviceSearchQuery
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
-from cbapi.psc.threathunter.query import Query
 
+from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
+from cbc_sdk import CBCloudAPI
+from cbapi.psc.threathunter.query import Query
 from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
 from cbinterface.psc.ubs import (
@@ -55,7 +55,7 @@ from cbinterface.psc.intel import (
     write_basic_report_template,
     backup_watchlist_threat_reports,
 )
-from cbinterface.psc.device import (
+from cbinterface.psc.devices import (
     make_device_query,
     device_info,
     time_since_checkin,
@@ -120,9 +120,7 @@ from cbinterface.scripted_live_response import build_playbook_commands, build_re
 LOGGER = logging.getLogger("cbinterface.psc.cli")
 
 
-def toggle_device_quarantine(
-    cb: CbThreatHunterAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool
-) -> bool:
+def toggle_device_quarantine(cb: CBCloudAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool) -> bool:
     """Toggle device quarantine state.
 
     Args:
@@ -132,7 +130,7 @@ def toggle_device_quarantine(
     if len(devices) > 0:
         if len(devices) > 10 and quarantine:
             LOGGER.error(
-                f"For now, not going to quarnantine {len(devices)} devices as a safe gaurd "
+                f"For now, not going to quarantine {len(devices)} devices as a safeguard "
                 f"to prevent mass device impact... use the GUI if you must."
             )
             return False
@@ -140,7 +138,6 @@ def toggle_device_quarantine(
         emotion = "👀" if quarantine else "👏"
         LOGGER.info(f"setting {verbiage} on {len(devices)} devices... {emotion}")
 
-        device_ids = []
         for d in devices:
             if d.quarantined == quarantine:
                 LOGGER.warning(f"device {d.id}:{d.name} is already set to {verbiage}.")
@@ -149,15 +146,14 @@ def toggle_device_quarantine(
                 LOGGER.info(f"device {d.id}:{d.name} hasn't checked in for: {time_since_checkin(d, refresh=False)}")
                 LOGGER.warning(f"device {d.id}:{d.name} appears offline 💤")
                 LOGGER.info(f"device {d.id}:{d.name} will change quarantine state when it comes online 👌")
-            device_ids.append(d.id)
-            cb.device_quarantine(device_ids, quarantine)
+            cb.device_quarantine([d.id], quarantine)
         return True
 
 
-def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
-    """Given an argument parser subparser, build a psc specific parser."""
-    # device query (psc)
-    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query (PSC).")
+def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
+    """Given an argument parser subparser, build a EEDR specific parser."""
+    # device query
+    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query.")
     parser_sensor.add_argument("device_query", help="the device query you'd like to execute. 'FIELDS' for help.")
     parser_sensor.add_argument(
         "-nw",
@@ -401,17 +397,18 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
 
-def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace) -> bool:
-    """The logic to execute psc ThreatHunter specific command line arguments.
+def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
+    """The logic to execute EEDR specific command line arguments.
 
     Args:
         cb: CbThreatHunterAPI
         args: parsed argparse namespace
+
     Returns:
         True or None on success, False on failure.
     """
-    if not isinstance(cb, CbThreatHunterAPI):
-        LOGGER.critical(f"Requires Cb PSC based API. Got '{product}' API.")
+    if not isinstance(cb, CBCloudAPI):
+        LOGGER.critical(f"Requires Cb PSC based API. Got '{args.product}' API.")
         return False
 
     # UBS #
@@ -423,7 +420,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
             set_ubs_args = [arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True]
             if not set_ubs_args:
-                LOGGER.debug(f"seting ubs metadata argument as default.")
+                LOGGER.debug("seting ubs metadata argument as default.")
                 args.ubs_get_metadata = True
 
             if args.ubs_get_file:
@@ -450,7 +447,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if results:
                     print(json.dumps(results, indent=2))
         else:
-            LOGGER.error(f"You must specify at least one sha256 with the `--sha256` argument.")
+            LOGGER.error("You must specify at least one sha256 with the `--sha256` argument.")
             return False
 
         return True
@@ -487,7 +484,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 args.alert_ids.extend([line.strip().strip('"') for line in sys.stdin])
 
             if not args.alert_ids:
-                LOGGER.error(f"You have to supply at least one alert ID.")
+                LOGGER.error("You have to supply at least one alert ID.")
                 return False
 
             if args.get_alert:
@@ -502,7 +499,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     )
                     for alert_id in args.alert_ids
                 ]
-                if result:
+                if results:
                     print(json.dumps(results, indent=2))
 
             if args.dismiss_alert:
@@ -555,11 +552,11 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 with open(args.report_path, "r") as fp:
                     report_data = json.load(fp)
                 if not report_data:
-                    LOGGER.error(f"failed to load report data")
+                    LOGGER.error("failed to load report data")
                     return False
                 watchlist_data = create_new_report_and_append_to_watchlist(cb, args.watchlist_id, report_data)
                 if watchlist_data:
-                    LOGGER.info(f"successfully appended new threat report to watchlist.")
+                    LOGGER.info("successfully appended new threat report to watchlist.")
                 return True
 
             if args.write_basic_threat_report_template:
@@ -603,7 +600,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             if args.delete_watchlist_report:
                 result = delete_report(cb, args.delete_watchlist_report)
                 if result.status_code == 204:
-                    LOGGER.info(f"deleted watchlist report")
+                    LOGGER.info("deleted watchlist report")
 
             if args.update_ioc_query:
                 report_id, ioc_id = args.update_ioc_query.split("/", 1)
@@ -671,15 +668,14 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         return True
 
-    # Device Quering #
+    # Device Querying #
     if args.command and args.command.startswith("d"):
         LOGGER.info(f"searching {args.environment} environment for device query: {args.device_query}...")
         if args.device_query.upper() == "FIELDS":
-            device_meta_file = os.path.join(os.path.dirname(cbapi_file_path), "psc/defense/models/deviceInfo.yaml")
+            device_meta_file = os.path.join(os.path.dirname(cbc_sdk_file_path), "platform/models/device.yaml")
             model_data = {}
             with open(device_meta_file, "r") as fp:
                 model_data = yaml.safe_load(fp.read())
-            possibly_searchable_props = list(model_data["properties"].keys())
             print("Device model fields:")
             for field_name in list(model_data["properties"].keys()):
                 print(f"\t{field_name}")
@@ -718,7 +714,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_results = True if print_results.lower() == "y" else False
 
         if len(devices) > 0 and print_results:
-            print("\n------------------------- PSC DEVICE RESULTS -------------------------")
+            print("\n------------------------- ENTERPRISE EDR DEVICE RESULTS -------------------------")
             for device in devices:
                 if args.all_details:
                     print()
@@ -730,7 +726,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print()
         return True
 
-    # Process Quering #
+    # Process Querying #
     if args.command and (args.command.startswith("q") or args.command == "pq"):
         LOGGER.info(f"searching {args.environment} environment..")
 
@@ -747,17 +743,18 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             args.query,
             start_time=args.start_time,
             last_time=args.last_time,
-            raise_exceptions=False,
+            raise_exceptions=True,
             validate_query=True,
         )
 
         if args.facets:
             LOGGER.info("getting facet data...")
-            print_facet_histogram(processes)
+            # print_facet_histogram(processes)
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
-            # from cbinterface.psc.query import print_facet_histogram_v2
-            # print_facet_histogram_v2(cb, args.query)
+            from cbinterface.psc.query import print_facet_histogram_v2
+
+            print_facet_histogram_v2(cb, args.query, args.start_time, args.last_time)
 
         # don't display large results by default
         print_results = True
@@ -771,7 +768,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             for proc in processes:
                 print("  -------------------------")
                 if args.all_details:
-                    print(proc)
+                    print(vars(proc))
                 else:
                     print_process_info(proc, raw_print=args.all_details, header=False)
 
@@ -842,7 +839,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             iarg for iarg, value in vars(args).items() if iarg.startswith("inspect_") and value is True
         ]
         if not set_inspection_args:
-            LOGGER.debug(f"seting all inspection arguments.")
+            LOGGER.debug("seting all inspection arguments.")
             for iarg in all_inspection_args:
                 args.__setattr__(iarg, True)
 
@@ -895,7 +892,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         # store a list of commands to execute on this device
         commands = []
 
-        LOGGER.info(f"searching for device...")
+        LOGGER.info("searching for device...")
         device = None
         try:  # if device.id
             device = Device(cb, args.name_or_id)
@@ -903,7 +900,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             device = find_device_by_hostname(cb, args.name_or_id)
 
         if not device:
-            LOGGER.info(f"could not find a device.")
+            LOGGER.info("could not find a device.")
             return None
 
         if args.execute_command:
@@ -1046,7 +1043,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 timeout = timeout * 86400
 
             if not session_manager.wait_for_active_session(device, timeout=timeout):
-                LOGGER.error(f"reached timeout waiting for active session.")
+                LOGGER.error("reached timeout waiting for active session.")
                 return False
 
             # we have an active session, issue the commands.

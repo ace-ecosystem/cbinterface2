@@ -3,6 +3,7 @@
 Example, enumerating USB activity on a sensor from a programatic
 analysis of registry modifications.
 """
+
 import os
 import logging
 
@@ -35,7 +36,7 @@ def logon_history(cb: CbPSCBaseAPI, hostname_or_username_query) -> None:
         hostname_or_username_query.startswith("device_name:")
         or hostname_or_username_query.startswith("process_username:")
     ):
-        LOGGER.info(f"use 'device_name:' or 'process_username:' field to narrow enumeration search.")
+        LOGGER.info("use 'device_name:' or 'process_username:' field to narrow enumeration search.")
 
     # query = f"process_name:userinit.exe parent_name:winlogon.exe {hostname_or_username_query}"
     # XXX will catch more than "log on"

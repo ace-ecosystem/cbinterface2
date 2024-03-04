@@ -9,23 +9,23 @@ import coloredlogs
 import signal
 
 import cbapi.auth
-from cbapi.psc.threathunter import CbThreatHunterAPI
+from cbc_sdk import CBCloudAPI
 from cbapi.response import CbResponseAPI
-from cbapi.errors import ConnectionError, UnauthorizedError, ServerError, CredentialError
+from cbc_sdk.errors import ConnectionError, UnauthorizedError, ServerError, CredentialError
 
 from cbinterface.helpers import clean_exit
 from cbinterface.config import (
     set_timezone,
     save_configuration,
-    get_default_cbapi_product,
-    get_default_cbapi_profile,
-    set_default_cbapi_profile,
-    set_default_cbapi_product,
+    get_default_cb_product,
+    get_default_cb_profile,
+    set_default_cb_profile,
+    set_default_cb_product,
     get_playbook_map,
 )
 
 from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
-from cbinterface.psc.cli import add_psc_arguments_to_parser, execute_threathunter_arguments
+from cbinterface.psc.cli import add_eedr_arguments_to_parser, execute_eedr_arguments
 from cbinterface.scripted_live_response import write_playbook_template, write_remediation_template
 
 LOGGER = logging.getLogger("cbinterface.cli")
@@ -35,26 +35,26 @@ SUPPORTED_PRODUCTS = ["response", "psc"]
 
 def load_configured_environments():
     """Load Carbon Black environments from config files."""
-    # set custom attributes
-    default_profile = cbapi.auth.default_profile
-    default_profile["lr_token"] = None  # needed for psc
-
     configured_environments = {}
     for product in SUPPORTED_PRODUCTS:
         configured_environments[product] = []
-        # FileCredentialStore loads `default_profile`
         for profile in cbapi.auth.FileCredentialStore(product).get_profiles():
             configured_environments[product].append(profile)
-
+    # PSC was renamed to Enterprise EDR...
+    if "psc" in configured_environments.keys():
+        configured_environments["enterprise_edr"] = configured_environments.pop("psc")
     return configured_environments
 
 
 def main():
     """Main entry point for cbinterface."""
-
     # configure logging #
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - [%(levelname)s] %(message)s")
-    coloredlogs.install(level="INFO", logger=logging.getLogger())
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s")
+    coloredlogs.install(
+        level="INFO",
+        logger=logging.getLogger(),
+        fmt="%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s",
+    )
 
     # set clean exit signal
     signal.signal(signal.SIGINT, clean_exit)
@@ -68,8 +68,8 @@ def main():
             environments.append(f"{product}:{profile}")
 
     # chose the default environment
-    default_product_name = get_default_cbapi_product()
-    default_profile_name = get_default_cbapi_profile()
+    default_product_name = get_default_cb_product()
+    default_profile_name = get_default_cb_profile()
     default_environments = [env for env in environments if env.startswith(default_product_name)]
     default_environment = f"{default_product_name}:{default_profile_name}"
     if environments:
@@ -80,7 +80,6 @@ def main():
         )
     else:
         LOGGER.warning("no carbon black configurations found.")
-
     parser = argparse.ArgumentParser(description="Interface to Carbon Black for IDR teams.")
     parser.add_argument("-d", "--debug", action="store_true", help="Turn on debug logging.")
     parser.add_argument(
@@ -253,7 +252,7 @@ def main():
             action="store_true",
             help="Sensor hostname/ID to isolation/unisolate (on/off). (CB Response)",
         )
-    if configured_environments["psc"]:
+    if configured_environments["enterprise_edr"]:
         parser_lr.add_argument(
             "-q",
             "--quarantine",
@@ -380,15 +379,19 @@ def main():
     # only add independent product args if product is a configured option
     if configured_environments["response"]:
         add_response_arguments_to_parser(subparsers)
-    if configured_environments["psc"]:
-        add_psc_arguments_to_parser(subparsers)
+    if configured_environments["enterprise_edr"]:
+        add_eedr_arguments_to_parser(subparsers)
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
-        coloredlogs.install(level="DEBUG", logger=logging.getLogger())
+        coloredlogs.install(
+            level="DEBUG",
+            logger=logging.getLogger(),
+            fmt="%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s",
+        )
 
     if args.time_zone:
         set_timezone(args.time_zone)
@@ -399,17 +402,18 @@ def main():
 
     if args.set_default_environment:
         product, profile = args.set_default_environment.split(":", 1)
-        set_default_cbapi_product(product)
-        set_default_cbapi_profile(profile)
+        set_default_cb_product(product)
+        set_default_cb_profile(profile)
         save_configuration()
 
     # Functionality that doesn't require a Cb connection.
+    # XTODO
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
         if args.live_response_command and (
             args.live_response_command.startswith("play") or args.live_response_command == "pb"
         ):
             if args.list_playbooks:
-                print(f"\nConfigured Playbooks:")
+                print("\nConfigured Playbooks:")
                 for pb_key, pb_metadata in playbook_map.items():
                     print(f"\t{pb_metadata['name']} : {pb_metadata['description']}")
                 print()
@@ -434,9 +438,9 @@ def main():
             cb = CbResponseAPI(profile=profile)
             execute_response_arguments(cb, args)
 
-        elif product == "psc":
-            cb = CbThreatHunterAPI(profile=profile)
-            execute_threathunter_arguments(cb, args)
+        elif product == "enterprise_edr":
+            cb = CBCloudAPI(profile=profile)
+            execute_eedr_arguments(cb, args)
     except ConnectionError as e:
         LOGGER.critical(f"Couldn't connect to {product} {profile}: {e}")
     except UnauthorizedError as e:

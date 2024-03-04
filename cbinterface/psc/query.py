@@ -1,6 +1,4 @@
-"""Functions that work with query related Carbon Black APIs.
-"""
-
+"""Functions that work with query related Carbon Black APIs."""
 
 import time
 import datetime
@@ -11,9 +9,10 @@ from typing import Union, Dict, List
 # NOTE: boil everything down to CbPSCBaseAPI where possible
 # so "enterprise standard" will work wherever possible?
 # from cbapi.psc.rest_api import CbPSCBaseAPI
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process
-from cbapi.psc.threathunter.models import AsyncProcessQuery
-from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
+# from cbapi.psc.threathunter import CBCloudAPI
+from cbc_sdk import CBCloudAPI
+from cbc_sdk.platform.processes import AsyncProcessQuery, Process
+from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.query")
 
@@ -73,7 +72,7 @@ def create_event_search(
         return False
 
 
-def event_search_complete(cb: CbThreatHunterAPI, job_id):
+def event_search_complete(cb: CBCloudAPI, job_id):
     """Return true when a search is complete."""
     url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/enriched_events/search_jobs/{job_id}"
     result = cb.get_object(url)
@@ -82,7 +81,7 @@ def event_search_complete(cb: CbThreatHunterAPI, job_id):
     return False
 
 
-def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
+def get_event_search_results(cb: CBCloudAPI, job_id) -> Dict:
     """Return any results of an event search."""
     url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/enriched_events/search_jobs/{job_id}/results"
     try:
@@ -93,7 +92,7 @@ def get_event_search_results(cb: CbThreatHunterAPI, job_id) -> Dict:
         return None
     try:
         return cb.get_object(url)
-    except Exception as e:
+    except Exception:
         LOGGER.error("could not get results: {e}")
         return None
 
@@ -110,7 +109,6 @@ def yield_events(
     end_time: datetime.datetime = None,
 ) -> Dict:
     """Yield Process Events resulting from Event search."""
-
     time_range = {}
     if start_time:
         time_range["start"] = start_time.isoformat()
@@ -141,7 +139,7 @@ def yield_events(
 
         total_results = result["num_available"]
         if total_results != result["num_found"]:
-            LOGGER.debug(f"not all events are available.")
+            LOGGER.debug("not all events are available.")
         results = result.get("results", [])
 
         LOGGER.debug(f"got {len(results)+position} out of {total_results} total events.")
@@ -192,7 +190,7 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
     """Custom query validation.
 
     Args:
-        query: Cb threathunter query
+        query: CBCloudAPI query
     Returns:
         True if a valid query, else False.
     """
@@ -211,60 +209,61 @@ def is_valid_process_query(query: AsyncProcessQuery) -> bool:
 
     validated = query._cb.get_object(url, query_parameters=args)
     if not validated.get("valid"):
-        LOGGER.error(f'Invalud query {validated["invalid_message"]}')
+        LOGGER.error(f'Invalid query {validated["invalid_message"]}')
         return False
     return True
 
 
-def is_valid_process_query_string(cb: CbThreatHunterAPI, query: str) -> bool:
-    """
-    Validates a process query string is valid for PSC.
+def is_valid_process_query_string(cb: CBCloudAPI, query: str) -> bool:
+    """Validates a process query string is valid for Enterprise EDR.
 
     Args:
-        cb: Cb PSC connection object
+        cb: CBCloudAPI connection object
         query (str): The query.
+
     Returns:
         True or False
     """
-    args = {"q": query}
-    url = f"/api/investigate/v1/orgs/{cb.credentials.org_key}/processes/search_validation"
-    validated = cb.get_object(url, query_parameters=args)
+    args = {"query": query}
+    url = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/search_validation"
+    validated = cb.post_object(url, args).json()
     if not validated.get("valid"):
         return False
     return True
 
 
-def convert_from_legacy_query(cb: CbThreatHunterAPI, query: str) -> str:
-    """
-    Converts a legacy CB Response query to a ThreatHunter query.
+def convert_from_legacy_query(cb: CBCloudAPI, query: str) -> str:
+    """Converts a legacy CB Response (EDR) query to a Enterprise EDR query.
 
     Args:
-        cb: Cb PSC connection object
+        cb: CBCloudAPI connection object
         query (str): The query to convert.
+
     Returns:
         str: The converted query.
     """
     args = {"query": query}
-    resp = cb.post_object("/threathunter/feedmgr/v2/query/translate", args)
-    if resp.status_code != 200:
-        LOGGER.error(f"got {resp.status_code} attempting query conversion")
+    try:
+        resp = cb.post_object("/threathunter/feedmgr/v2/query/translate", args)
+    except ClientError as e:
+        LOGGER.error(f"got error attempting query conversion: {e}")
         return False
     resp = resp.json()
     return resp.get("query")
 
 
 def make_process_query(
-    cb: CbThreatHunterAPI,
+    cb: CBCloudAPI,
     query: str,
     start_time: datetime.datetime = None,
     last_time: datetime.datetime = None,
     raise_exceptions=True,
     validate_query=False,
 ) -> AsyncProcessQuery:
-    """Query the CbThreatHunterAPI environment and interface results.
+    """Query the CBCloudAPI environment and interface results.
 
     Args:
-        cb: A CbThreatHunterAPI object to use
+        cb: A CBCloudAPI object to use
         query: The process query
         start_time: Set the process start time (UTC).
         last_time: Set the process last time (UTC). Only processes with a start
@@ -273,21 +272,41 @@ def make_process_query(
         validate_query: If True, validate the query before attempting to use it.
     Returns: AsyncProcessQuery or empty list.
     """
-
     LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
     processes = []
     try:
-        processes = cb.select(Process).where(query)
+        processes = (
+            cb.select(Process)
+            .where(query)
+            .set_fields(
+                [
+                    "*",
+                    "device_os",
+                    "device_external_ip",
+                    "device_internal_ip",
+                    "parent_hash",
+                    "parent_name",
+                    "process_reputation",
+                    "process_start_time",
+                    "process_cmdline",
+                    "process_terminated",
+                ]
+            )
+        )
         if validate_query and not is_valid_process_query(processes):
             LOGGER.info(f"For help, refer to {cb.url}/#userGuideLocation=search-guide/investigate-th&fullscreen")
-            LOGGER.info(f"Is this a legacy query? ... Attempting to convert to PSC query ...")
+            LOGGER.info("Is this a legacy query? ... Attempting to convert to Enterprise EDR query ...")
             converted_query = convert_from_legacy_query(cb, query)
             if not converted_query:
-                LOGGER.info(f"failed to convert to PSC query... 🤡 your query is jacked up.")
+                LOGGER.info("failed to convert to Enterprise EDR query... 🤡 your query is jacked up.")
                 return []
             if is_valid_process_query_string(cb, converted_query):
-                LOGGER.info("successfully converted and validated the query you supplied to a PSC query 👍, see below.")
-                LOGGER.info(f"👇👇 try again with the following query 👇👇 - also, hint, single quotes are your friend. ")
+                LOGGER.info(
+                    "successfully converted and validated the query you supplied to a Enterprise EDR query 👍, see below."
+                )
+                LOGGER.info(
+                    "👇👇 try again with the following query 👇👇 - also, hint, single quotes are your friend. "
+                )
                 LOGGER.info(f"query: '{converted_query}'")
             return []
         if start_time or last_time:
@@ -304,59 +323,61 @@ def make_process_query(
 
 
 def print_facet_histogram(processes: AsyncProcessQuery):
-    """Print facets"""
+    """Print facets."""
     # NOTE, this is a custom implementations. TODO, look at using the built in
-    # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/cb-threathunter/latest/process-search-v2/#start-a-process-facet-job
+    # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#start-a-facet-search-on-processes-v2
     # Also, NOTE that this table lists fields that support faceting via the built in method, children is not one of them:
-    # https://developer.carbonblack.com/reference/cb-threathunter/latest/process-search-fields/
+    # https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-fields/
     from cbinterface.helpers import create_histogram_string, get_os_independent_filepath
 
-    fields = [
-        "parent_name",
-        "process_name",
-        "process_reputation",
-        "process_username",
-        "process_sha256",
-        "device_name",
-        "device_os",
-    ]
-    path_fields = ["parent_name", "process_name"]
-    processes = list(processes)
+    # fields = [
+    #     "parent_name",
+    #     "process_name",
+    #     "process_reputation",
+    #     "process_username",
+    #     "process_sha256",
+    #     "device_name",
+    #     "device_os",
+    # ]
+    # path_fields = ["parent_name", "process_name"]
+    # processes = list(processes)
     facet_dict = {}
-    for field_name in fields:
-        facet_dict[field_name] = {}
-        for proc in processes:
-            value = proc.get(field_name, "None")
-            if isinstance(value, list):
-                if len(value) > 1:
-                    LOGGER.info(f"condensing {value} to {value[0]}")
-                value = value[0]
-            elif field_name in path_fields:
-                file_path = get_os_independent_filepath(value)
-                file_name = file_path.name
-                value = file_name
-            if value not in facet_dict[field_name]:
-                facet_dict[field_name][value] = 1
-            else:
-                facet_dict[field_name][value] += 1
+    # for field_name in fields:
+    #     facet_dict[field_name] = {}
+    #     for proc in processes:
+    #         value = proc.get(field_name, "None")
+    #         if isinstance(value, list):
+    #             if len(value) > 1:
+    #                 LOGGER.info(f"condensing {value} to {value[0]}")
+    #             value = value[0]
+    #         elif field_name in path_fields:
+    #             file_path = get_os_independent_filepath(value)
+    #             file_name = file_path.name
+    #             value = file_name
+    #         facet_dict[field_name][value] = facet_dict[field_name].get(value, 0) + 1
 
     # special case for "children"
     try:
         facet_dict["childproc_name"] = {}
-        depth = 0
+        print(processes[0].tree)
         for proc in processes:
-            if proc.childproc_count < 1:
-                continue
-            children = proc.summary.children or []
-            for cp in children:
-                process_path = get_os_independent_filepath(cp.get("process_name"))
-                process_name = process_path.name
-                if process_name not in facet_dict["childproc_name"]:
-                    facet_dict["childproc_name"][process_name] = 1
-                else:
-                    facet_dict["childproc_name"][process_name] += 1
+            # query = "parent_pid:{0}".format(parent_process_id)
+            # print(proc.children)
+            pass
+            # child_processes = cb.select(Process).where(query).sort("last_update desc").all()
+            # if proc.childproc_count < 1:
+            #     continue
+            # children = proc.summary.children or []
+            # for cp in children:
+            #     process_path = get_os_independent_filepath(cp.get("process_name"))
+            #     process_name = process_path.name
+            #     if process_name not in facet_dict["childproc_name"]:
+            #         facet_dict["childproc_name"][process_name] = 1
+            #     else:
+            #         facet_dict["childproc_name"][process_name] += 1
     except Exception as e:
         LOGGER.warning(f"problem enumerating child process names: {e}")
+        raise e
 
     print("\n------------------------- FACET HISTOGRAMS -------------------------")
     for field_name, facets in facet_dict.items():
@@ -367,14 +388,13 @@ def print_facet_histogram(processes: AsyncProcessQuery):
 
 
 def print_facet_histogram_v2(
-    cb: CbThreatHunterAPI,
+    cb: CBCloudAPI,
     query: str,
     start_time: datetime.datetime = None,
     end_time: datetime.datetime = None,
     return_string=False,
 ):
-    """Get query facet results from the CbAPI enriched events facets."""
-
+    """Get query facet results from the CBCloudAPI enriched events facets."""
     # NOTE: no support for childproc facets with this built-in
 
     from cbinterface.helpers import get_os_independent_filepath
@@ -394,21 +414,20 @@ def print_facet_histogram_v2(
     post_data["terms"] = {"fields": fields}
     post_data["time_range"] = {}
     if start_time:
-        post_data["time_range"]["start"] = start_time.isoformat()
+        post_data["time_range"]["start"] = start_time.isoformat() + "Z"
     if end_time:
-        post_data["time_range"]["end"] = end_time.isoformat()
-
-    # TODO handle status_code!=200 and response is not json for both requests
-
+        post_data["time_range"]["end"] = end_time.isoformat() + "Z"
     uri = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/facet_jobs"
     job_id = cb.post_object(uri, post_data).json().get("job_id", None)
     if not job_id:
-        LOGGER.error(f"failed to get facet job.")
+        LOGGER.error("failed to get facet job.")
         return False
 
     uri = f"/api/investigate/v2/orgs/{cb.credentials.org_key}/processes/facet_jobs/{job_id}/results"
+    time.sleep(1)
     facet_data = cb.get_object(uri)
-
+    while facet_data["contacted"] != facet_data["completed"]:
+        facet_data = cb.get_object(uri)
     txt = "\n------------------------- FACET HISTOGRAMS -------------------------\n"
     total = facet_data["num_found"]
     for facets in facet_data["terms"]:
@@ -417,14 +436,16 @@ def print_facet_histogram_v2(
         txt += "\t--------------------------------\n"
         for entry in facets["values"]:
             entry_name = entry["name"]
-            if field_name in path_fields and len(entry_name) > 55:
-                file_path = get_os_independent_filepath(entry_name)
-                file_name = file_path.name
-                file_path = entry_name[: len(entry_name) - len(file_name)]
-                file_path = file_path[: 40 - len(file_name)]
-                entry_name = f"{file_path}...{file_name}"
+            entry_length = 55 if field_name in path_fields else 20
+            if field_name in path_fields:
+                if len(entry_name) > 55:
+                    file_path = get_os_independent_filepath(entry_name)
+                    file_name = file_path.name
+                    file_path = entry_name[: len(entry_name) - len(file_name)]
+                    file_path = file_path[: 40 - len(file_name)]
+                    entry_name = f"{file_path}...{file_name}"
             bar_value = int(((entry["total"] / total) * 100) / 2)
-            txt += "%30s: %5s %5s%% %s\n" % (
+            txt += f"%-{entry_length}s %5s %5s%% %s\n" % (
                 entry_name,
                 entry["total"],
                 int(entry["total"] / total * 100),

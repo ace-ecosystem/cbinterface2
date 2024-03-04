@@ -1,5 +1,4 @@
-"""Everthing ThreatHunter process related.
-"""
+"""Everthing ThreatHunter process related."""
 
 import datetime
 import logging
@@ -34,7 +33,7 @@ def load_process(p: Process) -> Process:
     try:
         return Process.new_object(p._cb, p.summary._info["process"])
     except RecursionError:
-        LOGGER.warning(f"RecursionError occurred loading process details.. loading incomplete details.")
+        LOGGER.warning("RecursionError occurred loading process details.. loading incomplete details.")
         url = f"/api/investigate/v1/orgs/{p._cb.credentials.org_key}/processes/summary"
         summary = p._cb.get_object(url, query_parameters={"process_guid": p.process_guid})
         return Process.new_object(p._cb, summary["process"])
@@ -51,6 +50,7 @@ def select_process(cb: CbThreatHunterAPI, process_guid: str):
     Args:
         cb: a CbThreatHunterAPI object
         process_guid: a Cb PSC GUID in the form of a string.
+
     Returns:
         A threathunter.Process or None
     """
@@ -78,6 +78,7 @@ def process_to_dict(
     Args:
       p: Carbon Black Cloud Process
       max_events: a limit on the amount of process events to add.
+
     Returns:
       Dictionary representation of the process
     """
@@ -117,11 +118,10 @@ def print_process_info(proc: Process, yield_strings: bool = False, raw_print=Fal
     """Analyst friendly custom process data format.
 
     Args:
-        proc: CbTH Process (fully initialized)
+        proc: CBCloudAPI Process (fully initialized)
         yield_strings: return string if True, else print it to stdout.
     Returns: string or None
     """
-
     if not is_process_loaded(proc):
         proc = load_process(proc)
 
@@ -139,7 +139,7 @@ def print_process_info(proc: Process, yield_strings: bool = False, raw_print=Fal
         txt += f"  Process MD5: {proc.get('process_md5')}\n"
         txt += f"  Process SHA256: {proc.get('process_sha256')}\n"
         txt += f"  Process Path: {proc.get('process_name')}\n"
-        txt += f"  Process Terminated: {proc.get('process_terminated')}\n"
+        # txt += f"  Process Terminated: {proc.get('process_terminated')}\n"
         txt += f"  Start Time: {as_configured_timezone(proc.get('process_start_time', ''))}\n"
         process_command_line = (
             proc.process_cmdline[0]
@@ -153,9 +153,8 @@ def print_process_info(proc: Process, yield_strings: bool = False, raw_print=Fal
         parent_sha256 = next((hsh for hsh in proc.get("parent_hash", []) if len(hsh) == 64), None)
         txt += f"  Parent SHA256: {parent_sha256}\n"
         txt += f"  Process Username: {proc.get('process_username')}\n"
-        txt += f"  Device Username: {proc.get('device_username')}\n"
-        txt += f"  Device ID: {proc.get('device_id')}\n"
         txt += f"  Device Name: {proc.get('device_name')}\n"
+        txt += f"  Device ID: {proc.get('device_id')}\n"
         txt += f"  Device OS: {proc.get('device_os')}\n"
         txt += f"  External IP: {proc.get('device_external_ip')}\n"
         txt += f"  Internal IP: {proc.get('device_internal_ip')}\n"
@@ -167,7 +166,6 @@ def print_process_info(proc: Process, yield_strings: bool = False, raw_print=Fal
 
 def print_ancestry(p: Process, max_depth=0, depth=0):
     """Print the process ancestry for this process."""
-
     if max_depth and depth > max_depth:
         return
 
@@ -198,7 +196,6 @@ def print_process_tree(
     end_time: datetime.datetime = None,
 ):
     """Print the process tree."""
-
     if max_depth and depth > max_depth:
         return
 
@@ -226,10 +223,10 @@ def print_process_tree(
             child["process_guid"] = child.get("childproc_process_guid")
             print_process_tree(child, max_depth=max_depth, depth=depth + 1)
     except RecursionError:
-        LOGGER.warning(f"hit RecursionError walking process tree.. stopping here")
+        LOGGER.warning("hit RecursionError walking process tree.. stopping here")
         print(" [!] reached recursion limit walking process tree ...")
     except ObjectNotFoundError:
-        LOGGER.warning(f"got 404 object not found for child process")
+        LOGGER.warning("got 404 object not found for child process")
 
 
 def get_events_by_type(
@@ -244,7 +241,6 @@ def get_events_by_type(
     One of filemod, netconn, regmod, modload, crossproc, childproc, scriptload,
         fileless_scriptload, netconn_proxy
     """
-
     if isinstance(p, dict):
         # processing from json file.
         # NOTE time frame is not enforced here as we assume that happend when the json was written.
@@ -302,7 +298,8 @@ def print_filemods(
 def format_netconn(nc: Union[Event, Dict]):
     """Format netconn or netconn_proxy event into a single line."""
     import ipaddress
-    import socket, struct
+    import socket
+    import struct
 
     action = (
         nc.get("netconn_action", "")[len("ACTION_CONNECTION_") :]
@@ -587,7 +584,7 @@ def inspect_process_tree(
                     **kwargs,
                 )
             except RecursionError:
-                LOGGER.warning(f"hit RecursionError inspecting process tree.")
+                LOGGER.warning("hit RecursionError inspecting process tree.")
                 break
     except ObjectNotFoundError as e:
         LOGGER.warning(f"got object not found error for child proc: {e}")

@@ -1,14 +1,13 @@
-"""Functions that work with Carbon Black Sensors.
-"""
+"""Functions that work with Carbon Black Sensors."""
 
 import datetime
 import logging
 
 from typing import Dict
 
-from cbapi.psc import Device
+from cbc_sdk.platform.device import Device, DeviceSearchQuery
+from cbc_sdk import CBCloudAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.psc.devices_query import DeviceSearchQuery
 from cbapi.errors import ServerError, ClientError
 
 from cbinterface.helpers import convert_csv_data_to_dictionary
@@ -65,8 +64,7 @@ def device_search(
     start: int = 0,
     sort: Dict = [{"field": "last_contact_time", "order": "asc"}],
 ) -> Dict:
-    """Device search"""
-
+    """Device search."""
     url = f"/appservices/v6/orgs/{cb.credentials.org_key}/devices/_search"
 
     if not search_data:
@@ -96,7 +94,7 @@ def device_search(
 
 
 def yield_devices(
-    cb: CbThreatHunterAPI,
+    cb: CBCloudAPI,
     search_data: Dict = {},
     criteria: Dict = {},
     exclusions: Dict = {},
@@ -109,8 +107,7 @@ def yield_devices(
     time_range_string: str = None,
     max_results: int = None,  # limit results returned
 ) -> Dict:
-    """Yield Alerts resulting from alert search."""
-
+    """Yield Devices resulting from device search."""
     time_range = {}
     if time_range_string:
         time_range["range"] = f"-{time_range_string}"
@@ -166,7 +163,7 @@ def is_device_online(d: Device) -> bool:
     return False
 
 
-def make_device_query(cb: CbThreatHunterAPI, device_query: str) -> DeviceSearchQuery:
+def make_device_query(cb: CBCloudAPI, device_query: str) -> DeviceSearchQuery:
     """Construct a DeviceSearchQuery object."""
     try:
         if ":" not in device_query:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cbinterface"
-version = "2.3.35"
+version = "3.0.0"
 description = "command line tool for interfacing with multiple carbonblack environments to perform analysis and live response functions"
 authors = ["Sean McFeely <mcfeelynaes@gmail.com>"]
 license = "Apache-2.0"
@@ -14,6 +14,7 @@ python = "^3.6"
 cbapi = "^1.7.3"
 coloredlogs = "^15.0"
 argcomplete = ">=1.12.2,2.*"
+carbon-black-cloud-sdk = "^1.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
