@@ -5,7 +5,7 @@ import logging
 
 from typing import Dict
 
-from cbc_sdk.platform.device import Device, DeviceSearchQuery
+from cbc_sdk.platform.devices import Device, DeviceSearchQuery
 from cbc_sdk import CBCloudAPI
 from cbapi.psc.threathunter import CbThreatHunterAPI
 from cbapi.errors import ServerError, ClientError

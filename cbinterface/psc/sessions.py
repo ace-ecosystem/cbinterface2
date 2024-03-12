@@ -22,7 +22,7 @@ from cbapi.errors import ObjectNotFoundError, TimeoutError
 from typing import List, Union
 
 from cbinterface.commands import BaseSessionCommand
-from cbinterface.psc.devices import is_device_online
+from cbinterface.psc.device import is_device_online
 
 LOGGER = logging.getLogger("cbinterface.psc.session")
 

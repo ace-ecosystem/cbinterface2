@@ -6,10 +6,6 @@ import logging
 
 from typing import Union, Dict, List
 
-# NOTE: boil everything down to CbPSCBaseAPI where possible
-# so "enterprise standard" will work wherever possible?
-# from cbapi.psc.rest_api import CbPSCBaseAPI
-# from cbapi.psc.threathunter import CBCloudAPI
 from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform.processes import AsyncProcessQuery, Process
 from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
@@ -255,44 +251,32 @@ def convert_from_legacy_query(cb: CBCloudAPI, query: str) -> str:
 def make_process_query(
     cb: CBCloudAPI,
     query: str,
+    fields: List = ["*", "process_start_time"],
     start_time: datetime.datetime = None,
     last_time: datetime.datetime = None,
     raise_exceptions=True,
     validate_query=False,
+    silent=False,
 ) -> AsyncProcessQuery:
     """Query the CBCloudAPI environment and interface results.
 
     Args:
         cb: A CBCloudAPI object to use
         query: The process query
+        fields: fields to be included from the query.
         start_time: Set the process start time (UTC).
-        last_time: Set the process last time (UTC). Only processes with a start
-        time that falls before this last_time.
+        last_time: Set the process last time (UTC). Only processes with
+        a start time that falls before this last_time.
         raise_exceptions: Let any exceptions raise up (library use)
-        validate_query: If True, validate the query before attempting to use it.
+        validate_query: If True, validate the query before attempting to
+        use it.
+        silent: if True, suppress some printing from this function.
     Returns: AsyncProcessQuery or empty list.
     """
     LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
     processes = []
     try:
-        processes = (
-            cb.select(Process)
-            .where(query)
-            .set_fields(
-                [
-                    "*",
-                    "device_os",
-                    "device_external_ip",
-                    "device_internal_ip",
-                    "parent_hash",
-                    "parent_name",
-                    "process_reputation",
-                    "process_start_time",
-                    "process_cmdline",
-                    "process_terminated",
-                ]
-            )
-        )
+        processes = cb.select(Process).where(query).set_fields(fields)
         if validate_query and not is_valid_process_query(processes):
             LOGGER.info(f"For help, refer to {cb.url}/#userGuideLocation=search-guide/investigate-th&fullscreen")
             LOGGER.info("Is this a legacy query? ... Attempting to convert to Enterprise EDR query ...")
@@ -313,7 +297,8 @@ def make_process_query(
             start_time = start_time.isoformat() if start_time else "*"
             end_time = last_time.isoformat() if last_time else "*"
             processes = processes.where(f"process_start_time:[{start_time} TO {end_time}]")
-        LOGGER.info(f"got {len(processes)} process results.")
+        if not silent:
+            LOGGER.info(f"got {len(processes)} process results.")
     except Exception as e:
         if raise_exceptions:
             raise (e)
@@ -324,57 +309,50 @@ def make_process_query(
 
 def print_facet_histogram(processes: AsyncProcessQuery):
     """Print facets."""
-    # NOTE, this is a custom implementations. TODO, look at using the built in
-    # API methods: https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#start-a-facet-search-on-processes-v2
-    # Also, NOTE that this table lists fields that support faceting via the built in method, children is not one of them:
-    # https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-fields/
+    # NOTE, this is a custom implementations used before the v2
+    # Will probably be deprecated in favor of v2 using API facet job
     from cbinterface.helpers import create_histogram_string, get_os_independent_filepath
 
-    # fields = [
-    #     "parent_name",
-    #     "process_name",
-    #     "process_reputation",
-    #     "process_username",
-    #     "process_sha256",
-    #     "device_name",
-    #     "device_os",
-    # ]
-    # path_fields = ["parent_name", "process_name"]
-    # processes = list(processes)
+    fields = [
+        "parent_name",
+        "process_name",
+        "process_reputation",
+        "process_username",
+        "process_sha256",
+        "device_name",
+        "device_os",
+    ]
+    path_fields = ["parent_name", "process_name"]
+    processes = list(processes)
     facet_dict = {}
-    # for field_name in fields:
-    #     facet_dict[field_name] = {}
-    #     for proc in processes:
-    #         value = proc.get(field_name, "None")
-    #         if isinstance(value, list):
-    #             if len(value) > 1:
-    #                 LOGGER.info(f"condensing {value} to {value[0]}")
-    #             value = value[0]
-    #         elif field_name in path_fields:
-    #             file_path = get_os_independent_filepath(value)
-    #             file_name = file_path.name
-    #             value = file_name
-    #         facet_dict[field_name][value] = facet_dict[field_name].get(value, 0) + 1
+    for field_name in fields:
+        facet_dict[field_name] = {}
+        for proc in processes:
+            value = proc.get(field_name, "None")
+            if isinstance(value, list):
+                if len(value) > 1:
+                    LOGGER.info(f"condensing {value} to {value[0]}")
+                value = value[0]
+            elif field_name in path_fields:
+                file_path = get_os_independent_filepath(value)
+                file_name = file_path.name
+                value = file_name
+            facet_dict[field_name][value] = facet_dict[field_name].get(value, 0) + 1
 
     # special case for "children"
     try:
         facet_dict["childproc_name"] = {}
-        print(processes[0].tree)
         for proc in processes:
-            # query = "parent_pid:{0}".format(parent_process_id)
-            # print(proc.children)
-            pass
-            # child_processes = cb.select(Process).where(query).sort("last_update desc").all()
-            # if proc.childproc_count < 1:
-            #     continue
-            # children = proc.summary.children or []
-            # for cp in children:
-            #     process_path = get_os_independent_filepath(cp.get("process_name"))
-            #     process_name = process_path.name
-            #     if process_name not in facet_dict["childproc_name"]:
-            #         facet_dict["childproc_name"][process_name] = 1
-            #     else:
-            #         facet_dict["childproc_name"][process_name] += 1
+            if proc.childproc_count < 1:
+                continue
+            children = proc.summary.children or []
+            for cp in children:
+                process_path = get_os_independent_filepath(cp.get("process_name"))
+                process_name = process_path.name
+                if process_name not in facet_dict["childproc_name"]:
+                    facet_dict["childproc_name"][process_name] = 1
+                else:
+                    facet_dict["childproc_name"][process_name] += 1
     except Exception as e:
         LOGGER.warning(f"problem enumerating child process names: {e}")
         raise e

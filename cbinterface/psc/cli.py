@@ -13,13 +13,14 @@ from dateutil import tz
 from typing import List, Union
 
 from cbc_sdk import __file__ as cbc_sdk_file_path
-from cbc_sdk.platform.device import Device, DeviceSearchQuery
-from cbapi.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
+from cbc_sdk.platform.devices import Device, DeviceSearchQuery
+from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
 
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
+from cbapi.psc.threathunter import CbThreatHunterAPI, Watchlist, Report, Feed
 from cbc_sdk import CBCloudAPI
+from cbc_sdk.platform import Process
 from cbapi.psc.threathunter.query import Query
-from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
+from cbinterface.helpers import is_eedr_guid, clean_exit, input_with_timeout
 from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
 from cbinterface.psc.ubs import (
     request_and_get_files,
@@ -55,7 +56,7 @@ from cbinterface.psc.intel import (
     write_basic_report_template,
     backup_watchlist_threat_reports,
 )
-from cbinterface.psc.devices import (
+from cbinterface.psc.device import (
     make_device_query,
     device_info,
     time_since_checkin,
@@ -64,7 +65,6 @@ from cbinterface.psc.devices import (
     yield_devices,
 )
 from cbinterface.psc.process import (
-    select_process,
     print_process_info,
     print_ancestry,
     print_process_tree,
@@ -741,6 +741,18 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
         processes = make_process_query(
             cb,
             args.query,
+            fields=[
+                "*",
+                "device_os",
+                "device_external_ip",
+                "device_internal_ip",
+                "parent_hash",
+                "parent_name",
+                "process_reputation",
+                "process_start_time",
+                "process_cmdline",
+                "parent_guid",
+            ],
             start_time=args.start_time,
             last_time=args.last_time,
             raise_exceptions=True,
@@ -749,7 +761,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
         if args.facets:
             LOGGER.info("getting facet data...")
-            # print_facet_histogram(processes)
+            # print_facet_histogram(processes) - unvailable with CBC SDK
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
             from cbinterface.psc.query import print_facet_histogram_v2
@@ -768,14 +780,14 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
             for proc in processes:
                 print("  -------------------------")
                 if args.all_details:
-                    print(vars(proc))
+                    print(proc)
                 else:
                     print_process_info(proc, raw_print=args.all_details, header=False)
 
         return True
 
     # Enumerations #
-    if args.command and args.command == "enumerate":
+    if args.command and args.command in ["enumerate", "e"]:
         if args.logon_history:
             logon_history(cb, args.logon_history)
             return
@@ -783,16 +795,33 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
     # Process Inspection #
     if args.command and (args.command == "proc" or args.command.startswith("i")):
         process_id = args.process_guid_options
-        if not is_psc_guid(process_id):
+        if not is_eedr_guid(process_id):
             # check to see if the analyst passed a local file path, which we assume is a local process json file
             # if os.path.exists(args.process_guid_options):
             # XXX NOTE: create functionality sourced from process json file?
-            LOGGER.error(f"{process_id} is not in the form of a CbThreathunter process guid.")
+            LOGGER.error(f"{process_id} is not in the form of a CB Cloud process guid.")
             return False
 
         try:
-            # proc = Process(cb, process_id)
-            proc = select_process(cb, process_id)
+            proc = make_process_query(
+                cb,
+                f"process_guid:{process_id}",
+                fields=[
+                    "*",
+                    "device_os",
+                    "device_external_ip",
+                    "device_internal_ip",
+                    "parent_hash",
+                    "parent_name",
+                    "process_reputation",
+                    "process_start_time",
+                    "process_cmdline",
+                    "process_terminated",
+                ],
+                raise_exceptions=True,
+                validate_query=False,
+                silent=True,
+            ).first()
             if not proc:
                 LOGGER.warning(f"Process data does not exist for GUID={process_id}")
                 return False

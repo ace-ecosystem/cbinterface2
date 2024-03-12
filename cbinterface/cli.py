@@ -83,7 +83,7 @@ def main():
     parser = argparse.ArgumentParser(description="Interface to Carbon Black for IDR teams.")
     parser.add_argument("-d", "--debug", action="store_true", help="Turn on debug logging.")
     parser.add_argument(
-        "-e",
+        "-env",
         "--environment",
         action="store",
         choices=environments,
@@ -384,7 +384,6 @@ def main():
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-
     if args.debug:
         logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
         coloredlogs.install(

@@ -7,7 +7,7 @@ analysis of registry modifications.
 import os
 import logging
 
-from cbapi.psc.rest_api import CbPSCBaseAPI
+from cbc_sdk import CBCloudAPI
 
 from cbinterface.helpers import as_configured_timezone
 
@@ -15,14 +15,14 @@ from cbinterface.helpers import as_configured_timezone
 LOGGER = logging.getLogger("cbinterface.psc.enumerations")
 
 
-def search_for_usb_devices(cb: CbPSCBaseAPI, query):
+def search_for_usb_devices(cb: CBCloudAPI, query):
     # XXX - This doesn't look implemented in TH?
     uri = f"/device_control/v3/orgs/{cb.credentials.org_key}/devices/_search"
     data = {"query": query}
     return cb.post_object(uri, data).json()
 
 
-def logon_history(cb: CbPSCBaseAPI, hostname_or_username_query) -> None:
+def logon_history(cb: CBCloudAPI, hostname_or_username_query) -> None:
     """Given hostname or username, enumerate logon history.
 
     Note, this is an analysis of the WINDOWS behavior when a new user
@@ -45,10 +45,10 @@ def logon_history(cb: CbPSCBaseAPI, hostname_or_username_query) -> None:
     processes = make_process_query(cb, query)
     if processes and len(processes) > 0:
         timezone_string = os.environ.get("CBINTERFACE_TIMEZONE", "GMT")
-        print(f"\n\t{timezone_string} Time    \t|\tUsername\t|\tHostname")
+        print(f"\n\t{timezone_string} Time        \t|\tUsername\t|\tHostname")
         for proc in processes:
             start_time = as_configured_timezone(proc.process_start_time, apply_time_format="%Y-%m-%d %H:%M:%S%z")
             username = proc.process_username[0]
-            print("  {}\t    {}\t\t{}".format(start_time, username, proc.device_name))
+            print("  {}\t     {}\t\t{}".format(start_time, username, proc.device_name))
         print()
     return
