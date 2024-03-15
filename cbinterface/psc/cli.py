@@ -15,8 +15,7 @@ from typing import List, Union
 from cbc_sdk import __file__ as cbc_sdk_file_path
 from cbc_sdk.platform.devices import Device, DeviceSearchQuery
 from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
-
-from cbapi.psc.threathunter import CbThreatHunterAPI, Watchlist, Report, Feed
+from cbc_sdk.enterprise_edr import Watchlist, Feed
 from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform import Process
 from cbapi.psc.threathunter.query import Query
@@ -266,7 +265,9 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
 
     # intel watchlists
-    parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
+    parser_intel_watchlists = intel_subparsers.add_parser(
+        "watchlists", help="Interface with Enterprise EDR Watchlists."
+    )
     parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
     parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
     parser_intel_watchlists.add_argument(
@@ -282,7 +283,7 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "-wt",
         "--write-basic-threat-report-template",
         action="store_true",
-        help="Write a basic singel query IOC threat report template.",
+        help="Write a basic single query IOC threat report template.",
     )
     parser_intel_watchlists.add_argument(
         "--update-ioc-query",
@@ -306,7 +307,7 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
     # intel feeds
-    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
+    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with Enterprise EDR Feeds.")
     parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
     parser_intel_feeds.add_argument(
         "-f",
@@ -325,7 +326,7 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
     # alert parser plopped in here under intel
-    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
+    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with Alerts.")
     parser_intel_alerts.add_argument(
         "-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with."
     )
@@ -401,14 +402,14 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
     """The logic to execute EEDR specific command line arguments.
 
     Args:
-        cb: CbThreatHunterAPI
+        cb: CBCloudAPI
         args: parsed argparse namespace
 
     Returns:
         True or None on success, False on failure.
     """
     if not isinstance(cb, CBCloudAPI):
-        LOGGER.critical(f"Requires Cb PSC based API. Got '{args.product}' API.")
+        LOGGER.critical(f"Requires Cb Enterprise EDR based API. Got '{args.product}' API.")
         return False
 
     # UBS #
@@ -556,8 +557,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
                     return False
                 watchlist_data = create_new_report_and_append_to_watchlist(cb, args.watchlist_id, report_data)
                 if watchlist_data:
-                    LOGGER.info("successfully appended new threat report to watchlist.")
-                return True
+                    return True
 
             if args.write_basic_threat_report_template:
                 result = write_basic_report_template()
@@ -611,6 +611,8 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
             if args.get_ioc_status:
                 report_id, ioc_id = args.get_ioc_status.split("/", 1)
                 status = is_ioc_ignored(cb, report_id, ioc_id, check_existence=True)
+                if status is None:
+                    return False
                 status = "IGNORED" if status else "ACTIVE"
                 print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
 
@@ -637,7 +639,6 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
                     for f in feeds:
                         print(Feed(cb, initial_data=f))
                         print()
-
             if args.get_feed:
                 feed = get_feed(cb, args.get_feed)
                 if not feed:
@@ -1085,7 +1086,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
     # Direct Session Interaction #
     if args.command and args.command.startswith("sess"):
-        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
         # if args.list_all_sessions:
         # Not implemented with PSC
