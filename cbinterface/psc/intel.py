@@ -42,34 +42,22 @@ import logging
 from dateutil import tz
 from dateutil.parser import parse as parse_timestamp
 from datetime import datetime
-from typing import Dict, List, Union
+from typing import Dict, List, Literal
 
 from cbc_sdk import CBCloudAPI
+from cbc_sdk.platform import Alert
 from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
 LOGGER = logging.getLogger("cbinterface.psc.intel")
 
 
 ## Alerts ##
-def alert_search(
-    cb: CBCloudAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
-    query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "first_event_time", "order": "DESC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-) -> Dict:
+def alert_search(cb: CBCloudAPI, search_data: Dict) -> Dict:
     """Perform an Alert search.
 
     One request and return the result.
     """
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/watchlist/_search"
-    if not search_data:
-        if "workflow" not in criteria:
-            criteria["workflow"] = workflow_state
-        search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
+    url = f"/api/alerts/v7/orgs/{cb.credentials.org_key}/alerts/_search"
     try:
         result = cb.post_object(url, search_data)
         return result.json()
@@ -87,99 +75,68 @@ def alert_search(
 
 def yield_alerts(
     cb: CBCloudAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
     query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-    max_results: int = None,  # limit results returned
+    time_range: Dict = None,
+    criteria: Dict = None,
+    exclusions: Dict = None,
+    sort: List[Dict] = [{"field": "backend_update_timestamp", "order": "ASC"}],
+    start: int = 1,
+    rows: int = 100,
+    max_results: int = 500,  # limit results returned
 ) -> Dict:
     """Yield Alerts resulting from alert search."""
-    position = start
+    data = {k: v for k, v in locals().items() if v is not None and k not in ["max_results", "cb"]}
+    print(data)
     still_querying = True
     while still_querying:
-        if max_results and position + rows > max_results:
+        if max_results and data["start"] + rows > max_results:
             # get however many rows that may result in max_results
-            rows = max_results - position
-        result = alert_search(
-            cb,
-            search_data=search_data,
-            criteria=criteria,
-            query=query,
-            rows=rows,
-            sort=sort,
-            start=position,
-            workflow_state=workflow_state,
-        )
+            rows = max_results - data["start"]
+        result = alert_search(cb, data)
 
         if not result:
             return result
-
         total_results = result["num_found"]
         results = result.get("results", [])
-        LOGGER.debug(f"got {len(results)+position} out of {total_results} total alerts.")
+        LOGGER.debug(f"got {len(results)+data['start']-1} out of {total_results} total alerts.")
         for item in results:
             yield item
-            position += 1
-            if max_results and position >= max_results:
+            data["start"] += 1
+            if max_results and data["start"] >= max_results:
                 still_querying = False
                 break
 
-        if position >= total_results:
+        if data["start"] >= total_results:
             still_querying = False
             break
 
 
-def get_all_alerts(
-    cb: CBCloudAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
-    query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-    max_results: int = None,  # limit results returned
-) -> Dict:
-    """Return list of Alerts resulting from alert search."""
-    return list(
-        yield_alerts(
-            cb,
-            search_data=search_data,
-            criteria=criteria,
-            query=query,
-            rows=rows,
-            sort=sort,
-            start=start,
-            workflow_state=workflow_state,
-            max_results=max_results,
-        )
-    )
-
-
 def get_alert(cb: CBCloudAPI, alert_id) -> Dict:
     """Get alert by ID."""
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
+    url = f"/api/alerts/v7/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
     try:
         return cb.get_object(url)
     except ServerError as e:
         LOGGER.error(f"Caught ServerError getting report {alert_id}: {e}")
 
 
-def update_alert_state(
+def update_alert_status(
     cb: CBCloudAPI,
-    alert_id,
-    state: Union["DISMISSED", "OPEN"],
-    remediation_state: str = None,
-    comment: str = None,
+    alert_ids: List[str],
+    status: Literal["OPEN", "IN_PROGRESS", "CLOSED"],
+    determination: Literal["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"],
+    closure_reason: Literal["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"],
+    note: str = None,
 ) -> Dict:
-    """Update alert remediation state by ID."""
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}/workflow"
-    remediation = {"state": state, "remediation_state": remediation_state, "comment": comment}
+    """Update alerts state."""
+    data = {k: v for k, v in locals().items() if v is not None and k not in ["cb", "alert_ids"]}
+    alert_query = cb.select(Alert).add_criteria("id", alert_ids)
+    job = alert_query.update(**data)
     try:
-        return cb.post_object(url, remediation).json()
+        alert_query = cb.select(Alert).add_criteria("id", alert_ids)
+        job = alert_query.update(**data)
+        job.await_completion().result()
+        return job.to_json()
     except ServerError as e:
         LOGGER.error(f"Caught ServerError: {e}")
         return False
@@ -191,23 +148,41 @@ def update_alert_state(
 def interactively_update_alert_state(
     cb: CBCloudAPI,
     alert_id,
-    state: Union["DISMISSED", "OPEN"] = None,
-    remediation_state: str = None,
-    comment: str = None,
+    status: Literal["OPEN", "IN_PROGRESS", "CLOSED"] = None,
+    determination: Literal["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"] = None,
+    closure_reason: Literal["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"] = None,
+    note: str = None,
 ) -> Dict:
     """Update alert remediation state by ID."""
     from cbinterface.helpers import input_with_timeout
 
-    if not state:
-        state = input_with_timeout("Alert state to set, DISMISSED or OPEN? [DISMISSED]: ") or "DISMISSED"
-        if state not in ["DISMISSED", "OPEN"]:
-            LOGGER.error(f"state must be one of [DISMISSED, OPEN], not {state}")
+    if not status:
+        status = input_with_timeout("Alert status to set, OPEN, IN_PROGRESS or CLOSED? [CLOSED]: ") or "CLOSED"
+        if status not in ["OPEN", "IN_PROGRESS", "CLOSED"]:
+            LOGGER.error(f"status must be one of [OPEN, IN_PROGRESS, CLOSED], not {status}")
             return False
-    if not remediation_state:
-        remediation_state = input_with_timeout("State of Remediation: ") or ""
-    if not comment:
-        comment = input_with_timeout("Comment: ") or ""
-    return update_alert_state(cb, alert_id, state, remediation_state, comment)
+    if not determination:
+        determination = input_with_timeout("Determination: ") or None
+        if determination not in ["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE", None]:
+            LOGGER.error(f"determination must be one of [TRUE_POSITIVE, FALSE_POSITIVE, NONE], not {determination}")
+            return False
+    if not closure_reason:
+        closure_reason = input_with_timeout("Closure reason: ") or None
+        if closure_reason not in [
+            "NO_REASON",
+            "RESOLVED",
+            "RESOLVED_BENIGN_KNOWN_GOOD",
+            "DUPLICATE_CLEANUP",
+            "OTHER",
+            None,
+        ]:
+            LOGGER.error(
+                f"closure reason must be one of [NO_REASON, RESOLVED, RESOLVED_BENIGN_KNOWN_GOOD, DUPLICATE_CLEANUP, OTHER], not {closure_reason}"
+            )
+            return False
+    if not note:
+        note = input_with_timeout("Note: ") or None
+    return update_alert_status(cb, alert_id, status, determination, closure_reason, note)
 
 
 ## Reports ##
@@ -627,7 +602,7 @@ def get_feed_report(cb: CBCloudAPI, feed_id: str, report_id: str) -> Dict:
     url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds/{feed_id}/reports/{report_id}"
     try:
         return cb.get_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting feed report {feed_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No feed {feed_id} or report {report_id} in the feed")

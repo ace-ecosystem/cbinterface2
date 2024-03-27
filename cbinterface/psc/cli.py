@@ -43,8 +43,8 @@ from cbinterface.psc.intel import (
     get_feed,
     get_feed_report,
     get_alert,
-    get_all_alerts,
-    update_alert_state,
+    yield_alerts,
+    update_alert_status,
     interactively_update_alert_state,
     get_watchlists_like_name,
     search_feed_names,
@@ -331,19 +331,33 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with."
     )
     parser_intel_alerts.add_argument("-g", "--get-alert", action="store_true", help="Get Alert information.")
-    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store_true", help="Dismiss an Alerts.")
-    parser_intel_alerts.add_argument("-o", "--open-alert", action="store_true", help="Set Alerts to Open (un-dismiss).")
     parser_intel_alerts.add_argument(
-        "-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively."
+        "-s",
+        "--alerts-status",
+        action="store",
+        choices=["OPEN", "IN_PROGRESS", "CLOSED"],
+        help="Set the status of Alerts.",
     )
+    parser_intel_alerts.add_argument(
+        "-d",
+        "--determination",
+        action="store",
+        choices=["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"],
+        help="Set the determination of Alerts. (Optional)",
+    )
+
     parser_intel_alerts.add_argument(
         "-r",
-        "--remediation-state",
+        "--closure-reason",
         action="store",
-        help="An Alert remediation state to use with any state change actions.",
+        choices=["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"],
+        help="Reason code for why the Alerts are being updated. (Optional)",
     )
     parser_intel_alerts.add_argument(
-        "-c", "--comment", action="store", help="An Alert comment to use with any state change actions."
+        "-n", "--note", action="store", help="Custom message to add to the note added to each modified aler. (Optional)"
+    )
+    parser_intel_alerts.add_argument(
+        "-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively."
     )
     parser_intel_alerts.add_argument(
         "--from-stdin", action="store_true", help="Read alert IDs from stdin to work with."
@@ -354,30 +368,69 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_alerts_search = intel_alerts_subparsers.add_parser(
         "search", help="Search Alerts with lucene syntax queries and/or value searches."
     )
-    parser_intel_alerts_search.add_argument("alert_query", action="store", help="The Alert search query.")
-    # TODO Add other arguments to allow for searching via start & end times, specifying rows, start, alert state
     parser_intel_alerts_search.add_argument(
-        "-cr",
-        "--create_time-range",
+        "alert_query",
         action="store",
-        help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
+        help="The lucene-formatted Alert search query. Example: 'watchlists_id:a1B2c3D4zxc AND workflow_status:OPEN'",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-rt",
+        "--relative-time-range",
+        action="store",
+        help="Only return alerts created over the previous time range. Format: <integer_quantity><time_units>; time_units in [M, w, d, h, m, s]. Default=2w",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-et",
+        "--explicit-time-range",
+        action="store",
+        help="Need to specify both start and end timestamps (ISO 8601) separated by a comma. Example: '2024-04-01T01:02:30.000Z,2024-04-03T04:05:06.000Z'",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-c",
+        "--criteria",
+        action="store",
+        type=json.loads,
+        help='Add criteria to the query. Example: \'{"device_os": ["WINDOWS"]}\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-ex",
+        "--exclusions",
+        action="store",
+        type=json.loads,
+        help='Add exclusions to the query. Example: \'{"device_location": ["UNKNOWN"], "device_os_version": ["Windows 11 x64"}]\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-so",
+        "--sort",
+        action="store",
+        default=[{"field": "backend_update_timestamp", "order": "ASC"}],
+        type=json.loads,
+        help='Sort the results. Default=\'[{"field": "backend_update_timestamp", "order": "ASC"}]\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-st",
+        "--pagination-start",
+        action="store",
+        default=1,
+        type=int,
+        help="One-based index of the first result to retrieve. Must be a whole number greater than or equal to 1. Default=1",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-r",
+        "--rows",
+        action="store",
+        default=100,
+        type=int,
+        help="The number of rows to return starting from the pagination start. Increase this value in large queries to reduce waiting time. Default=100",
     )
     parser_intel_alerts_search.add_argument(
         "-m",
         "--max-alerts-result",
         action="store",
-        default=100,
+        default=500,
         type=int,
-        help="Only return up to this many alerts. Default=100. HINT: set to '0' to return all results.",
+        help="Only return up to this many alerts. The maximum number of alerts is 10000. Default=500",
     )
-    parser_intel_alerts_search.add_argument(
-        "-as",
-        "--alert-states",
-        action="append",
-        choices=["DISMISSED", "OPEN"],
-        help="Only return Alerts in these states.",
-    )
-
     # cb response to psc migration parser
     parser_intel_migration = intel_subparsers.add_parser(
         "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
@@ -468,16 +521,32 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
         if args.intel_command == "alerts":
 
-            if args.intel_alerts_command == "search":  #'device_name': ['XW7R17'],
-                # NOTE TODO: implement start and end time argparse options
-                # criteria = {'last_event_time': {'start': '2021-04-13T19:39:30.054855+00:00', 'end': '2021-04-14T19:39:30.054855+00:00'}, 'workflow': ['OPEN']}
-                if args.create_time_range:
-                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = get_all_alerts(
-                    cb, query=args.alert_query, workflow_state=args.alert_states, max_results=args.max_alerts_result
+            if args.intel_alerts_command == "search":
+                if args.relative_time_range and args.explicit_time_range:
+                    logging.error("You can only use either explicit or relative time range. Try again.")
+                    return False
+                time_range = None
+                if args.relative_time_range:
+                    time_range = {"range": f"-{args.relative_time_range}"}
+                elif args.explicit_time_range:
+                    start, end = args.explicit_time_range.split(",")
+                    time_range = {"start": start.strip(), "end": end.strip()}
+                results = list(
+                    yield_alerts(
+                        cb,
+                        args.alert_query,
+                        time_range,
+                        args.criteria,
+                        args.exclusions,
+                        args.sort,
+                        args.pagination_start,
+                        args.rows,
+                        args.max_alerts_result,
+                    )
                 )
                 if results:
                     print(json.dumps(results, indent=2))
+                    print(f"\nTotal alerts {len(results)}")
 
                 return True
 
@@ -493,27 +562,15 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
                 if alerts:
                     print(json.dumps(alerts, indent=2))
 
-            if args.open_alert:
-                results = [
-                    update_alert_state(
-                        cb, alert_id, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
-                    )
-                    for alert_id in args.alert_ids
-                ]
-                if results:
-                    print(json.dumps(results, indent=2))
-
-            if args.dismiss_alert:
-                results = [
-                    update_alert_state(
-                        cb,
-                        alert_id,
-                        state="DISMISSED",
-                        remediation_state=args.remediation_state,
-                        comment=args.comment,
-                    )
-                    for alert_id in args.alert_ids
-                ]
+            if args.alerts_status:
+                results = update_alert_status(
+                    cb,
+                    args.alert_ids,
+                    status=args.alerts_status,
+                    determination=args.determination,
+                    closure_reason=args.closure_reason,
+                    note=args.note,
+                )
                 if results:
                     print(json.dumps(results, indent=2))
 
