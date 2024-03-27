@@ -1,5 +1,4 @@
-"""Helper functions for common actions.
-"""
+"""Helper functions for common actions."""
 
 import re
 import sys
@@ -17,7 +16,7 @@ from dateutil.zoneinfo import get_zonefile_instance
 LOGGER = logging.getLogger("cbinterface.helpers")
 
 UUID_REGEX = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
-PSC_GUID_REGEX = re.compile(r"[0-9A-Z]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{15}", re.I)
+EEDR_GUID_REGEX = re.compile(r"[0-9A-Z]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{15}", re.I)
 
 
 def is_uuid(uuid: str):
@@ -25,13 +24,13 @@ def is_uuid(uuid: str):
     return UUID_REGEX.match(uuid)
 
 
-def is_psc_guid(guid: str):
-    """Returns True if the given string matches the format of a PSC GUID."""
-    return PSC_GUID_REGEX.match(guid)
+def is_eedr_guid(guid: str):
+    """Returns True if the given string matches the format of a EEDR GUID."""
+    return EEDR_GUID_REGEX.match(guid)
 
 
 def input_with_timeout(prompt, default=None, timeout=30, stderr=True):
-    """Wait up to timeout for user input"""
+    """Wait up to timeout for user input."""
 
     def _log_and_exit(signum, frame):
         if stderr:
@@ -54,7 +53,7 @@ def input_with_timeout(prompt, default=None, timeout=30, stderr=True):
 
 def clean_exit(signal, frame):
     print()
-    LOGGER.info(f"caught KeyboardInterrupt. exiting.")
+    LOGGER.info("caught KeyboardInterrupt. exiting.")
     sys.exit(0)
 
 
@@ -107,12 +106,13 @@ def utc_offset_to_potential_tz_names(utc_offset: datetime.timedelta):
 
 def create_histogram_string(data: dict) -> str:
     """A convenience function that creates a graph in the form of a string.
+
     Args:
         data: A dictionary, where the values are integers representing a count of the keys.
+
     Returns:
         A graph in string form, pre-formatted for raw printing.
     """
-
     assert isinstance(data, dict)
     for key in data.keys():
         assert isinstance(data[key], int)

@@ -1,5 +1,4 @@
-"""Configuration related items.
-"""
+"""Configuration related items."""
 
 import os
 import logging
@@ -111,28 +110,28 @@ def get_timezone():
     return tz.gettz(os.environ.get("CBINTERFACE_TIMEZONE", "GMT"))
 
 
-def set_default_cbapi_product(env_product: str):
-    """Set CbAPI product."""
-    os.environ["CBINTERFACE_DEFAULT_CBAPI_PRODUCT"] = env_product
-    CONFIG.set("default", "cbapi_product", env_product)
+def set_default_cb_product(env_product: str):
+    """Set Carbon Black product."""
+    os.environ["CBINTERFACE_DEFAULT_CB_PRODUCT"] = env_product
+    CONFIG.set("default", "cb_product", env_product)
     return True
 
 
-def get_default_cbapi_product():
-    """ Get CbAPI product."""
-    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PRODUCT", "psc")
+def get_default_cb_product():
+    """Get Carbon Black product."""
+    return os.environ.get("CBINTERFACE_DEFAULT_CB_PRODUCT", "enterprise_edr")
 
 
-def set_default_cbapi_profile(profile: str):
-    """Set CbAPI profile/environment."""
-    os.environ["CBINTERFACE_DEFAULT_CBAPI_PROFILE"] = profile
-    CONFIG.set("default", "cbapi_profile", profile)
+def set_default_cb_profile(profile: str):
+    """Set CB profile/environment."""
+    os.environ["CBINTERFACE_DEFAULT_CB_PROFILE"] = profile
+    CONFIG.set("default", "cb_profile", profile)
     return True
 
 
-def get_default_cbapi_profile():
-    """Get CbAPI profile/environment."""
-    return os.environ.get("CBINTERFACE_DEFAULT_CBAPI_PROFILE", "default")
+def get_default_cb_profile():
+    """Get CB profile/environment."""
+    return os.environ.get("CBINTERFACE_DEFAULT_CB_PROFILE", "default")
 
 
 def set_and_establish_data_directory(data_dir_path: str = "."):
@@ -205,11 +204,11 @@ if "CBINTERFACE_TIMEZONE" not in os.environ:
     # timestamps from Cb are not timezone aware, but they are GMT.
     set_timezone(CONFIG.get("default", "time_zone", fallback="GMT"))
 
-if "CBINTERFACE_DEFAULT_CBAPI_PRODUCT" not in os.environ:
-    set_default_cbapi_product(CONFIG.get("default", "cbapi_product", fallback="psc"))
+if "CBINTERFACE_DEFAULT_CB_PRODUCT" not in os.environ:
+    set_default_cb_product(CONFIG.get("default", "cb_product", fallback="enterprise_edr"))
 
-if "CBINTERFACE_DEFAULT_CBAPI_PROFILE" not in os.environ:
-    set_default_cbapi_profile(CONFIG.get("default", "cbapi_profile", fallback="default"))
+if "CBINTERFACE_DEFAULT_CB_PROFILE" not in os.environ:
+    set_default_cb_profile(CONFIG.get("default", "cb_profile", fallback="default"))
 
 if "CBINTERFACE_DATA_DIR" not in os.environ:
     set_and_establish_data_directory(CONFIG.get("default", "data_dir", fallback="."))

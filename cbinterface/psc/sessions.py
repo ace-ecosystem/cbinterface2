@@ -102,12 +102,12 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         return session
 
     def submit_command(self, command: BaseSessionCommand, device: Union[int, Device]):
-        """
-        Create a new job to be executed as a Live Response.
+        """Create a new job to be executed as a Live Response.
 
         Args:
             command (BaseSessionCommand): The job to be scheduled.
             device (Device): Device to execute job on.
+
         Returns:
             Future: A reference to the running job.
         """
