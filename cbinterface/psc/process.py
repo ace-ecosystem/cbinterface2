@@ -49,7 +49,7 @@ def process_to_dict(
     # TODO: add start & end args so process events during a specific
     #  time window can be pulled. This could be added for several functions on this page.
     process = {}
-    process["info"] = p._info
+    process["info"] = p.get_details()
     process["events"] = {}
     event_count = 0
     for event in yield_events(p, start_time=start_time, end_time=end_time, rows=event_rows):
@@ -76,7 +76,7 @@ def process_to_dict(
     return process
 
 
-def print_process_info(proc: Process, yield_strings: bool = False, raw_print=False, header=True):
+def print_process_info(proc: Process, yield_strings: bool = False, raw_print=False, header=True, detailed=False):
     """Analyst friendly custom process data format.
 
     Args:
@@ -109,8 +109,8 @@ def print_process_info(proc: Process, yield_strings: bool = False, raw_print=Fal
         txt += f"  Process Reputation: {proc.get('process_reputation')}\n"
         txt += f"  Parent Name: {proc.get('parent_name')}\n"
         txt += f"  Parent GUID: {proc.get('parent_guid')}\n"
-        parent_sha256 = next((hsh for hsh in proc.get("parent_hash", []) if len(hsh) == 64), None)
-        txt += f"  Parent SHA256: {parent_sha256}\n"
+        parent_sha256 = next((hsh for hsh in proc.get("parent_hash", []) if len(hsh) == 64), None) if detailed else ""
+        txt += f"  Parent SHA256: {parent_sha256}\n" if detailed else ""
         txt += f"  Process Username: {proc.get('process_username')}\n"
         txt += f"  Device Name: {proc.get('device_name')}\n"
         txt += f"  Device ID: {proc.get('device_id')}\n"
@@ -132,12 +132,16 @@ def print_ancestry(p: Process, max_depth=0, depth=0):
         print()
     start_time = as_configured_timezone(p.get("process_start_time", ""))
     command_line = (
-        p["process_cmdline"][0]
-        if p.get("process_cmdline") and len(p["process_cmdline"]) == 1
-        else p.get("process_cmdline")
+        (
+            p["process_cmdline"][0]
+            if p.get("process_cmdline") and len(p["process_cmdline"]) == 1
+            else p.get("process_cmdline")
+        )
+        if "process_cmdline" in p.to_json()
+        else None
     )
     print(f"{'  '*(depth + 1)}{start_time}: {command_line} | {p['process_guid']}")
-    if p.parent_guid:
+    if "parent_guid" in p.to_json():
         parent = make_process_query(
             p._cb,
             f"process_guid:{p.parent_guid}",
