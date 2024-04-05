@@ -273,7 +273,7 @@ def make_process_query(
         silent: if True, suppress some printing from this function.
     Returns: AsyncProcessQuery or empty list.
     """
-    LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
+    LOGGER.debug(f"building query: {query} between '{start_time}' and '{last_time}'")
     processes = []
     try:
         processes = cb.select(Process).where(query).set_fields(fields)

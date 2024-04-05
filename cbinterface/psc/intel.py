@@ -86,7 +86,6 @@ def yield_alerts(
 ) -> Dict:
     """Yield Alerts resulting from alert search."""
     data = {k: v for k, v in locals().items() if v is not None and k not in ["max_results", "cb"]}
-    print(data)
     still_querying = True
     while still_querying:
         if max_results and data["start"] + rows > max_results:

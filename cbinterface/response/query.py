@@ -1,5 +1,4 @@
-"""Functions that work with query related Carbon Black APIs.
-"""
+"""Functions that work with query related Carbon Black APIs."""
 
 import datetime
 import logging
@@ -30,9 +29,8 @@ def make_process_query(
         XXX no_warnings: Do not warn before printing large query result sets.
     Returns: cbapi.response.models.ProcessQuery or empty list.
     """
-
     processes = []
-    LOGGER.debug(f"buiding query: {query} between '{start_time}' and '{last_time}'")
+    LOGGER.debug(f"building query: {query} between '{start_time}' and '{last_time}'")
     try:
         processes = cb.select(Process).where(query).group_by("id")
         processes = processes.min_last_server_update(start_time) if start_time else processes
@@ -47,7 +45,7 @@ def make_process_query(
 
 
 def print_facet_histogram(facet_dict):
-    """Print facets"""
+    """Print facets."""
     print("\n------------------------- FACET HISTOGRAMS -------------------------")
     for field_name, facets in facet_dict.items():
         if any([key for key in ["name", "percent", "ratio", "value"] if key not in facets[0].keys()]):
