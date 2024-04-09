@@ -1,5 +1,4 @@
-"""Universal Binary Store functions.
-"""
+"""Universal Binary Store functions."""
 
 import os
 import io
@@ -57,7 +56,6 @@ def get_file_content(cb: BaseAPI, file_found_object: Dict, compressed=True):
     Returns:
         The raw or compressed file content bytes.
     """
-    import io
     import zipfile
 
     sha256 = file_found_object["sha256"]
@@ -77,7 +75,7 @@ def get_file_content(cb: BaseAPI, file_found_object: Dict, compressed=True):
 
     with zipfile.ZipFile(io.BytesIO(compressed_content)) as zp:
         if "filedata" not in zp.namelist():
-            LOGGER.error(f"unexpected UBS compressed file content: missing 'filedata'")
+            LOGGER.error("unexpected UBS compressed file content: missing 'filedata'")
             return False
         with zp.open("filedata") as fp:
             return fp.read()
@@ -134,7 +132,7 @@ def request_and_get_file(
     file_found_object = file_request_results["found"][0]
     if return_bytes:
         if write_path:
-            LOGGER.warning(f"nonsensical for write_path and return_bytes to both be set.")
+            LOGGER.warning("nonsensical for write_path and return_bytes to both be set.")
         return get_file_content(cb, file_found_object, compressed=compressed)
     return get_file(cb, file_found_object, write_path=write_path, compressed=compressed)
 
@@ -211,7 +209,7 @@ def get_device_summary(cb: BaseAPI, sha256hashes: List):
 
 
 def yield_signature_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
-    """Yield an overview of digital signature for a given SHA-256 hash
+    """Yield an overview of digital signature for a given SHA-256 hash.
 
     This API will return a summary of the observed digital signature results
     for a given SHA-256 hash. The digital signature information for a binary
@@ -284,6 +282,7 @@ def consolidate_metadata_and_summaries(cb: BaseAPI, sha256hashes: List):
     Args:
       cb: A Cb API object
       sha256hashes: list of hashes to query about.
+
     Returns:
       A list of dictionaries, where each dictionary is a combined result
       for the respective sha256 hash.
@@ -293,7 +292,7 @@ def consolidate_metadata_and_summaries(cb: BaseAPI, sha256hashes: List):
         sha256_data = {
             "sha256": sha256,
             "metadata": [],
-            "device_sumamry": [],
+            "device_summary": [],
             "signature_summary": [],
             "file_path_summary": [],
         }
