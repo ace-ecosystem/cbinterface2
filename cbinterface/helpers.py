@@ -74,7 +74,7 @@ def as_configured_timezone(timestamp: Union[datetime.datetime, str], apply_time_
         return timestamp
 
     if isinstance(timestamp, str):
-        # psc
+        # enterprise edr
         try:
             timestamp = isoparse(timestamp)
         except ValueError:

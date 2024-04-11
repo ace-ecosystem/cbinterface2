@@ -7,14 +7,13 @@ from typing import Dict
 
 from cbc_sdk.platform.devices import Device, DeviceSearchQuery
 from cbc_sdk import CBCloudAPI
-from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.errors import ServerError, ClientError
+from cbc_sdk.errors import ServerError, ClientError
 
 from cbinterface.helpers import convert_csv_data_to_dictionary
 
 from cbinterface.helpers import as_configured_timezone
 
-LOGGER = logging.getLogger("cbinterface.psc.device")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.device")
 
 DEVICE_STATUSES = [
     "PENDING",
@@ -34,7 +33,7 @@ DEVICE_STATUSES = [
 ]
 
 
-def export_devices(cb: CbThreatHunterAPI, device_status: str = "ALL"):
+def export_devices(cb: CBCloudAPI, device_status: str = "ALL"):
     """Export devices with the given status to a CSV.
 
     Note device fields returned are limited. Use device search for all details.
@@ -54,7 +53,7 @@ def export_devices(cb: CbThreatHunterAPI, device_status: str = "ALL"):
 
 
 def device_search(
-    cb: CbThreatHunterAPI,
+    cb: CBCloudAPI,
     search_data: Dict = {},
     criteria: Dict = {},
     exclusions: Dict = {},
@@ -176,7 +175,7 @@ def make_device_query(cb: CBCloudAPI, device_query: str) -> DeviceSearchQuery:
     return devices
 
 
-def find_device_by_hostname(cb: CbThreatHunterAPI, name: str) -> Device:
+def find_device_by_hostname(cb: CBCloudAPI, name: str) -> Device:
     """Find a Device by name."""
     devices = make_device_query(cb, f"name:{name}")
     if len(devices) == 1:

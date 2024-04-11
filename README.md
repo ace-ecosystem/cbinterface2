@@ -2,7 +2,7 @@
 
 `cbinterface` is a command line tool and library for interfacing with one or more Carbon Black environments. 
 
-As of now, `cbinterface` primarily supports Carbon Black PSC EDR (Threathunter) and Carbon Black Response. However, a lot of functionality should also work with other CBC products, like Enterprise Standard. If you're using Enterprise Standard and something doesn't work, open an issue and I can likely swap out an underlying object and have it working quickly.
+As of now, `cbinterface` primarily supports Carbon Black Enterprise EDR and Carbon Black Response. However, a lot of functionality should also work with other CBC products, like Enterprise Standard. If you're using Enterprise Standard and something doesn't work, open an issue and I can likely swap out an underlying object and have it working quickly.
 
 # Install & Setup
 

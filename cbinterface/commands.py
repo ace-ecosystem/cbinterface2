@@ -48,7 +48,7 @@ class BaseSessionCommand:
 
     @property
     def hostname(self):
-        # NOTE: Appears this is set to None for psc. So, custom
+        # NOTE: Appears this is set to None for enterprise edr. So, custom
         # session manager sets it right before job submission.
         return self.session_data.get("hostname") or self._hostname
 
@@ -100,7 +100,7 @@ class BaseSessionCommand:
 
     def run(self):
         """The function to implement the live response command logic."""
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def process_result(self):
         """Implement logic to process any results."""
@@ -115,7 +115,8 @@ class BaseSessionCommand:
         if self.post_completion_command.startswith("tools/"):
             self.post_completion_command = f"{BASE_DIR}/{self.post_completion_command}"
         LOGGER.info(f"executing post completion command: {self.post_completion_command}")
-        import shlex, subprocess
+        import shlex
+        import subprocess
 
         try:
             args = shlex.split(self.post_completion_command)
@@ -403,7 +404,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
     """
 
     def __init__(self, local_filename: str = "", compress=True):
-        super().__init__(description=f"Dump System Memory")
+        super().__init__(description="Dump System Memory")
         self.local_filename = local_filename
         self.compress = compress
         self._memdump_id = None
@@ -428,7 +429,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
         # should only make it here if an error was not raise
         # check to see if the command has success status with server
         # and if the local file exists
-        memdump_cmd = get_command_result(self._cb, self.session_id, self._memdump_id)
+        get_command_result(self._cb, self.session_id, self._memdump_id)
         if memdump["status"] != "complete":
             LOGGER.error(f"problem completing memory dump: command status: {memdump['status']}")
             return False
@@ -436,7 +437,7 @@ class GetSystemMemoryDump(BaseSessionCommand):
             LOGGER.info(f" +  wrote: {self.local_filename}")
             return True
         else:
-            LOGGER.error(f"Memory dump completed but failed to get a local copy of the memory dump.")
+            LOGGER.error("Memory dump completed but failed to get a local copy of the memory dump.")
             return False
 
 
@@ -444,12 +445,12 @@ class GetFile(BaseSessionCommand):
     """Object that retrieves a file via Live Response."""
 
     def __init__(self, file_path, output_filename: Union[str, bool] = None, **kwargs):
-        """
-        Initialize the GetFile command.
+        """Initialize the GetFile command.
 
         Args:
             file_path (str): The file path to be fetched.
             output_filename: optional path to write the file content.
+
         Returns:
             True on success, False on failure.
         """
@@ -459,12 +460,13 @@ class GetFile(BaseSessionCommand):
         self.output_filename = output_filename
 
     def run(self, session: CbLRSessionBase):
-        """
-        Execute the file transfer.
+        """Execute the file transfer.
+
         Args:
             session (CbLRSessionBase): The Live Response session being used.
+
         Returns:
-            File content
+            File content.
         """
         if "{WILDMATCH}" in self._file_path:
             # split on "{WILDMATCH}" and search for the first match to collect
@@ -524,8 +526,8 @@ class DeleteFile(BaseSessionCommand):
     """Object that deletes a file via Live Response."""
 
     def __init__(self, file_path):
-        """
-        Delete the specified file name on the remote machine.
+        """Delete the specified file name on the remote machine.
+
         Args:
             filename (str): Name of the file to be deleted.
         """
@@ -541,10 +543,11 @@ class DeleteFile(BaseSessionCommand):
 
 
 class KillProcessByID(BaseSessionCommand):
-    """
-    Terminate a process by process id.
+    """Terminate a process by process id.
+
     Args:
         pid (int): Process ID to be terminated.
+
     Returns:
         bool: True if success, False if failure.
     """
@@ -594,10 +597,11 @@ class DeleteRegistryKey(BaseSessionCommand):
 
 
 class KillProcessByName(BaseSessionCommand):
-    """
-    Terminate a process by process name.
+    """Terminate a process by process name.
+
     Args:
         process_name (str): Process name(s) to be terminated.
+
     Returns:
         bool: True if success, False if failure.
     """

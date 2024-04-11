@@ -22,9 +22,9 @@ from cbapi.errors import ObjectNotFoundError, TimeoutError
 from typing import List, Union
 
 from cbinterface.commands import BaseSessionCommand
-from cbinterface.psc.device import is_device_online
+from cbinterface.enterprise_edr.device import is_device_online
 
-LOGGER = logging.getLogger("cbinterface.psc.session")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.session")
 
 CBLR_BASE = "/integrationServices/v3/cblr"
 

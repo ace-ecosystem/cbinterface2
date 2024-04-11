@@ -7,7 +7,7 @@ from io import StringIO
 from contextlib import redirect_stdout
 from typing import Dict, Union, List
 
-from cbinterface.psc.query import yield_events, make_process_query
+from cbinterface.enterprise_edr.query import yield_events, make_process_query
 
 from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform import Process, Event
@@ -15,7 +15,7 @@ from cbc_sdk.errors import ObjectNotFoundError
 
 from cbinterface.helpers import as_configured_timezone, get_os_independent_filepath
 
-LOGGER = logging.getLogger("cbinterface.psc.process")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.process")
 
 ALL_EVENT_TYPES = [
     "filemod",
@@ -269,7 +269,7 @@ def format_netconn(nc: Union[Event, Dict]):
         else nc.get("netconn_action")
     )
     if action == "CREATE":
-        # same behavior as PSC GUI
+        # same behavior as Enterprise EDR GUI
         action = "ESTABLISHED"
     action = action.capitalize()
     protocol = nc.get("netconn_protocol", "")

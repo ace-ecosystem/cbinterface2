@@ -10,13 +10,13 @@ import requests
 from datetime import datetime
 from typing import Dict, List, Union
 
-from cbapi.connection import BaseAPI
-from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
+from cbc_sdk import CBCloudAPI
+from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
-LOGGER = logging.getLogger("cbinterface.psc.ubs")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.ubs")
 
 
-def request_file_downloads(cb: BaseAPI, sha256hashes: List, expiration_seconds: int = 900) -> Dict:
+def request_file_downloads(cb: CBCloudAPI, sha256hashes: List, expiration_seconds: int = 900) -> Dict:
     """Request file download URLs.
 
     If the UBS has a file for the sha256, it should return a URL to GET the file content.
@@ -45,7 +45,7 @@ def request_file_downloads(cb: BaseAPI, sha256hashes: List, expiration_seconds: 
         return False
 
 
-def get_file_content(cb: BaseAPI, file_found_object: Dict, compressed=True):
+def get_file_content(cb: CBCloudAPI, file_found_object: Dict, compressed=True):
     """Return the file content as a byte string.
 
     Args:
@@ -81,7 +81,7 @@ def get_file_content(cb: BaseAPI, file_found_object: Dict, compressed=True):
             return fp.read()
 
 
-def get_file(cb: BaseAPI, file_found_object: Dict, write_path=None, compressed=True):
+def get_file(cb: CBCloudAPI, file_found_object: Dict, write_path=None, compressed=True):
     """Get file and write content to disk.
 
     Args:
@@ -111,7 +111,7 @@ def get_file(cb: BaseAPI, file_found_object: Dict, write_path=None, compressed=T
 
 
 def request_and_get_file(
-    cb: BaseAPI, sha256_hash, expiration_seconds: int = 900, write_path=None, compressed=True, return_bytes=False
+    cb: CBCloudAPI, sha256_hash, expiration_seconds: int = 900, write_path=None, compressed=True, return_bytes=False
 ):
     """Request and download any content for file with sha256 hash.
 
@@ -137,7 +137,7 @@ def request_and_get_file(
     return get_file(cb, file_found_object, write_path=write_path, compressed=compressed)
 
 
-def request_and_get_files(cb: BaseAPI, sha256hashes: List, expiration_seconds: int = 900, compressed=True):
+def request_and_get_files(cb: CBCloudAPI, sha256hashes: List, expiration_seconds: int = 900, compressed=True):
     """Request and download zip compressed files found by the sha256 list.
 
     Args:
@@ -162,7 +162,7 @@ def request_and_get_files(cb: BaseAPI, sha256hashes: List, expiration_seconds: i
     return written_file_paths
 
 
-def yield_file_metadata(cb: BaseAPI, sha256hashes: List):
+def yield_file_metadata(cb: CBCloudAPI, sha256hashes: List):
     """Yield metadata available for matching files."""
     url = f"/ubs/v1/orgs/{cb.credentials.org_key}/sha256"
     for sha256 in sha256hashes:
@@ -180,12 +180,12 @@ def yield_file_metadata(cb: BaseAPI, sha256hashes: List):
             LOGGER.error(f"UNHANDLED: {e}")
 
 
-def get_file_metadata(cb: BaseAPI, sha256hashes: List):
+def get_file_metadata(cb: CBCloudAPI, sha256hashes: List):
     """Return any metadata available for any matching files."""
     return list(yield_file_metadata(cb, sha256hashes))
 
 
-def yield_device_summary(cb: BaseAPI, sha256hashes: List):
+def yield_device_summary(cb: CBCloudAPI, sha256hashes: List):
     """Yield an overview of the devices that executed the file."""
     url = f"/ubs/v1/orgs/{cb.credentials.org_key}/sha256"
     for sha256 in sha256hashes:
@@ -203,12 +203,12 @@ def yield_device_summary(cb: BaseAPI, sha256hashes: List):
             LOGGER.error(f"UNHANDLED: {e}")
 
 
-def get_device_summary(cb: BaseAPI, sha256hashes: List):
+def get_device_summary(cb: CBCloudAPI, sha256hashes: List):
     """Return an overview of the devices that executed the file."""
     return list(yield_device_summary(cb, sha256hashes))
 
 
-def yield_signature_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
+def yield_signature_summary(cb: CBCloudAPI, sha256hashes: List, rows: int = 5):
     """Yield an overview of digital signature for a given SHA-256 hash.
 
     This API will return a summary of the observed digital signature results
@@ -243,12 +243,12 @@ def yield_signature_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
             LOGGER.error(f"UNHANDLED: {e}")
 
 
-def get_signature_summary(cb: BaseAPI, sha256hashes: List):
+def get_signature_summary(cb: CBCloudAPI, sha256hashes: List):
     """Return an overview of digital signature for a given SHA-256 hash."""
     return list(yield_signature_summary(cb, sha256hashes))
 
 
-def yield_file_path_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
+def yield_file_path_summary(cb: CBCloudAPI, sha256hashes: List, rows: int = 5):
     """Summary of the observed file paths for given SHA-256 hashes.
 
     This API will return a summary of the observed file paths. The results are
@@ -271,12 +271,12 @@ def yield_file_path_summary(cb: BaseAPI, sha256hashes: List, rows: int = 5):
             LOGGER.error(f"UNHANDLED: {e}")
 
 
-def get_file_path_summary(cb: BaseAPI, sha256hashes: List):
+def get_file_path_summary(cb: CBCloudAPI, sha256hashes: List):
     """Summary of the observed file paths for given SHA-256 hashes."""
     return list(yield_file_path_summary(cb, sha256hashes))
 
 
-def consolidate_metadata_and_summaries(cb: BaseAPI, sha256hashes: List):
+def consolidate_metadata_and_summaries(cb: CBCloudAPI, sha256hashes: List):
     """Combine file metadata and all summary information for given SHA-256 hashes.
 
     Args:

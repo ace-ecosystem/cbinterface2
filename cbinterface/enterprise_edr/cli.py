@@ -18,10 +18,9 @@ from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError, ClientEr
 from cbc_sdk.enterprise_edr import Watchlist, Feed
 from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform import Process
-from cbapi.psc.threathunter.query import Query
 from cbinterface.helpers import is_eedr_guid, clean_exit, input_with_timeout
-from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
-from cbinterface.psc.ubs import (
+from cbinterface.enterprise_edr.query import make_process_query, print_facet_histogram, yield_events
+from cbinterface.enterprise_edr.ubs import (
     request_and_get_files,
     get_file_metadata,
     get_device_summary,
@@ -29,8 +28,8 @@ from cbinterface.psc.ubs import (
     get_file_path_summary,
     consolidate_metadata_and_summaries,
 )
-from cbinterface.psc.intel import (
-    convert_response_watchlists_to_psc_edr_watchlists,
+from cbinterface.enterprise_edr.intel import (
+    convert_response_watchlists_to_enterprise_edr_watchlists,
     get_all_watchlists,
     get_watchlist,
     get_report,
@@ -38,7 +37,7 @@ from cbinterface.psc.intel import (
     get_report_with_IOC_status,
     print_report,
     interactively_update_report_ioc_query,
-    convert_response_watchlists_to_single_psc_edr_watchlist,
+    convert_response_watchlists_to_single_enterprise_edr_watchlist,
     get_all_feeds,
     get_feed,
     get_feed_report,
@@ -55,7 +54,7 @@ from cbinterface.psc.intel import (
     write_basic_report_template,
     backup_watchlist_threat_reports,
 )
-from cbinterface.psc.device import (
+from cbinterface.enterprise_edr.device import (
     make_device_query,
     device_info,
     time_since_checkin,
@@ -63,7 +62,7 @@ from cbinterface.psc.device import (
     is_device_online,
     yield_devices,
 )
-from cbinterface.psc.process import (
+from cbinterface.enterprise_edr.process import (
     print_process_info,
     print_ancestry,
     print_process_tree,
@@ -97,7 +96,7 @@ from cbinterface.commands import (
     CreateRegKey,
     GetSystemMemoryDump,
 )
-from cbinterface.psc.sessions import (
+from cbinterface.enterprise_edr.sessions import (
     CustomLiveResponseSessionManager,
     get_session_by_id,
     device_live_response_sessions_by_device_id,
@@ -107,7 +106,7 @@ from cbinterface.psc.sessions import (
     get_file_content,
     close_session_by_id,
 )
-from cbinterface.psc.enumerations import logon_history
+from cbinterface.enterprise_edr.enumerations import logon_history
 from cbinterface.config import (
     get_playbook_map,
     add_watchlist_id_to_intel_backup_list,
@@ -116,7 +115,7 @@ from cbinterface.config import (
 )
 from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
-LOGGER = logging.getLogger("cbinterface.psc.cli")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.cli")
 
 
 def toggle_device_quarantine(cb: CBCloudAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool) -> bool:
@@ -431,9 +430,9 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         type=int,
         help="Only return up to this many alerts. The maximum number of alerts is 10000. Default=500",
     )
-    # cb response to psc migration parser
+    # cb response to enterprise edr migration parser
     parser_intel_migration = intel_subparsers.add_parser(
-        "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
+        "migrate", help="Utilities for migrating response watchlists to Enterprise EDR intel."
     )
     parser_intel_migration.add_argument(
         "response_watchlist_json_data_path",
@@ -442,12 +441,12 @@ def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_migration.add_argument(
         "--one-for-one",
         action="store_true",
-        help="Create a PSC Watchlist for every CbR watchlist that passes validation.",
+        help="Create a Enterprise EDR Watchlist for every CbR watchlist that passes validation.",
     )
     parser_intel_migration.add_argument(
         "--many-to-one",
         action="store_true",
-        help="Create a single PSC Watchlist containing all CbR watchlist queries that pass validation.",
+        help="Create a single Enterprise EDR Watchlist containing all CbR watchlist queries that pass validation.",
     )
 
 
@@ -585,16 +584,16 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
                 response_watchlists = json.load(fp)
 
             if args.one_for_one:
-                results = convert_response_watchlists_to_psc_edr_watchlists(cb, response_watchlists)
+                results = convert_response_watchlists_to_enterprise_edr_watchlists(cb, response_watchlists)
                 LOGGER.info(
-                    f"created {len(results)} PSC watchlists from {len(response_watchlists)} Response watchlists."
+                    f"created {len(results)} Enterprise EDR watchlists from {len(response_watchlists)} Response watchlists."
                 )
                 print("Created watchlists:")
                 for wl in results:
                     print(f" + ID={wl['id']} - Title={wl['name']}")
 
             if args.many_to_one:
-                watchlist = convert_response_watchlists_to_single_psc_edr_watchlist(cb, response_watchlists)
+                watchlist = convert_response_watchlists_to_single_enterprise_edr_watchlist(cb, response_watchlists)
                 if not watchlist:
                     return False
                 LOGGER.info(
@@ -822,7 +821,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
             # print_facet_histogram(processes) - unvailable with CBC SDK
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
-            from cbinterface.psc.query import print_facet_histogram_v2
+            from cbinterface.enterprise_edr.query import print_facet_histogram_v2
 
             print_facet_histogram_v2(cb, args.query, args.start_time, args.last_time)
 
@@ -1146,9 +1145,9 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
         cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
         # if args.list_all_sessions:
-        # Not implemented with PSC
+        # Not implemented with Enterprise EDR
         # if args.list_sensor_sessions:
-        # Not implemented with PSC
+        # Not implemented with Enterprise EDR
 
         if args.get_session_command_list:
             print(json.dumps(get_session_commands(cblr, args.get_session_command_list), indent=2, sort_keys=True))

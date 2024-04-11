@@ -25,7 +25,7 @@ from cbinterface.config import (
 )
 
 from cbinterface.response.cli import add_response_arguments_to_parser, execute_response_arguments
-from cbinterface.psc.cli import add_eedr_arguments_to_parser, execute_eedr_arguments
+from cbinterface.enterprise_edr.cli import add_eedr_arguments_to_parser, execute_eedr_arguments
 from cbinterface.scripted_live_response import write_playbook_template, write_remediation_template
 
 LOGGER = logging.getLogger("cbinterface.cli")
@@ -197,7 +197,11 @@ def main():
         "-ml", "--modloads", dest="inspect_modloads", action="store_true", help="print modloads"
     )
     parser_inspect.add_argument(
-        "-sl", "--scriptloads", dest="inspect_scriptloads", action="store_true", help="print scriptloads (PSC)"
+        "-sl",
+        "--scriptloads",
+        dest="inspect_scriptloads",
+        action="store_true",
+        help="print scriptloads (Enterprise EDR)",
     )
     parser_inspect.add_argument(
         "-cp", "--crossprocs", dest="inspect_crossprocs", action="store_true", help="print crossprocs"
@@ -258,14 +262,14 @@ def main():
             "--quarantine",
             action="store_true",
             default=False,
-            help="Quarantine the devices returned by the query. (PSC)",
+            help="Quarantine the devices returned by the query. (Enterprise EDR)",
         )
         parser_lr.add_argument(
             "-uq",
             "--un_quarantine",
             action="store_true",
             default=False,
-            help="UN-Quarantine the devices returned by the query. (PSC)",
+            help="UN-Quarantine the devices returned by the query. (Enterprise EDR)",
         )
 
     # live response subparser
@@ -339,8 +343,8 @@ def main():
     parser_remediate.add_argument("-rs", "--remediation-script", action="store", help="Path to a remediaiton script.")
     parser_remediate.add_argument("--write-template", action="store_true", help="write a remediation template.")
 
-    # session parser - NOTE: functionality is limited on the PSC side, and it's specifically annoying that
-    # we can not get a list of active psc lr sessions... or at least I haven't figure out how to do that.
+    # session parser - NOTE: functionality is limited on the Enterprise EDR side, and it's specifically annoying that
+    # we can not get a list of active enterprise edr lr sessions... or at least I haven't figure out how to do that.
     parser_session = subparsers.add_parser("session", help="Interact with Cb live response server sessions.")
     if configured_environments["response"]:
         parser_session.add_argument(

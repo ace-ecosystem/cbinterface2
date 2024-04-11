@@ -12,7 +12,7 @@ from cbc_sdk import CBCloudAPI
 from cbinterface.helpers import as_configured_timezone
 
 
-LOGGER = logging.getLogger("cbinterface.psc.enumerations")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.enumerations")
 
 
 def search_for_usb_devices(cb: CBCloudAPI, query):
@@ -30,7 +30,7 @@ def logon_history(cb: CBCloudAPI, hostname_or_username_query) -> None:
     It will NOT show processes ran under other users, as often is the case
     with enterprise admin activity.
     """
-    from cbinterface.psc.query import make_process_query
+    from cbinterface.enterprise_edr.query import make_process_query
 
     if not (
         hostname_or_username_query.startswith("device_name:")

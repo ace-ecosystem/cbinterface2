@@ -10,7 +10,7 @@ from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform.processes import AsyncProcessQuery, Process
 from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
-LOGGER = logging.getLogger("cbinterface.psc.query")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.query")
 
 # NOTE: To receive all events, you must resubmit the search request until processed_segments is equal to total_segments.
 # https://developer.carbonblack.com/reference/carbon-black-cloud/platform/latest/platform-search-api-processes/#get-events-associated-with-a-given-process-v2

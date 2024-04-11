@@ -28,7 +28,7 @@ NOTE on Response Watchlist to Enterprise EDR Intel Migrations:
        `cbinterface intel migrate ~smcfeely/working/cbmigration/high_fid.response_watchlists.json --many-to-one`
 
   3. After that, I exported the remaining custom Response Watchlists into another json file and called the
-     `convert_response_watchlists_to_grouped_psc_edr_watchlists` function from a python terminal to organize
+     `convert_response_watchlists_to_grouped_enterprise_edr_watchlists` function from a python terminal to organize
      the Response Watchlists into *two* Enterprise EDR Watchlists, one for Response Watchlists that have never
      had a hit and then the ones remaining are lower fidelity and went into a "Low Fidelity" Enterprise EDR Watchlist.
 
@@ -48,7 +48,7 @@ from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform import Alert
 from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
-LOGGER = logging.getLogger("cbinterface.psc.intel")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.intel")
 
 
 ## Alerts ##
@@ -310,7 +310,7 @@ def write_basic_report_template() -> bool:
 def update_report_ioc_query(cb: CBCloudAPI, report_id, ioc_id, ioc_query_string) -> Dict:
     """Update IOC query value with ioc_query_string.
 
-    A cbapi.errors.ClientError will be raised if the query is not valid.
+    A cbc_sdk.errors.ClientError will be raised if the query is not valid.
     """
     report_data = get_report_with_IOC_status(cb, report_id)
     for ioc in report_data["iocs_v2"]:
@@ -784,7 +784,9 @@ def yield_reports_created_from_response_watchlists(cb: CBCloudAPI, response_watc
         yield intel_report
 
 
-def convert_response_watchlists_to_psc_edr_watchlists(cb: CBCloudAPI, response_watchlists: List[Dict]) -> List[Dict]:
+def convert_response_watchlists_to_enterprise_edr_watchlists(
+    cb: CBCloudAPI, response_watchlists: List[Dict]
+) -> List[Dict]:
     """Convert a list of response watchlists to Enterprise EDR watchlists.
 
     This is a one-for-one Watchlist migration. You probably don't want this.
@@ -821,7 +823,7 @@ def convert_response_watchlists_to_psc_edr_watchlists(cb: CBCloudAPI, response_w
     return results
 
 
-def convert_response_watchlists_to_single_psc_edr_watchlist(
+def convert_response_watchlists_to_single_enterprise_edr_watchlist(
     cb: CBCloudAPI,
     response_watchlists: List[Dict],
     watchlist_name: str = None,
@@ -858,7 +860,7 @@ def convert_response_watchlists_to_single_psc_edr_watchlist(
     return create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, reports)
 
 
-def convert_response_watchlists_to_grouped_psc_edr_watchlists(
+def convert_response_watchlists_to_grouped_enterprise_edr_watchlists(
     cb: CBCloudAPI,
     response_watchlists: List[Dict],
     watchlist_names_start_with: str = "ACE ",
