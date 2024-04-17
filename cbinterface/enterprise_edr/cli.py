@@ -1,4 +1,4 @@
-"""PSC Threathunter CLI functions."""
+"""Enterprise EDR CLI functions."""
 
 import os
 import sys
@@ -12,16 +12,15 @@ from dateutil import tz
 
 from typing import List, Union
 
-from cbapi import __file__ as cbapi_file_path
-from cbapi.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
-from cbapi.psc import Device
-from cbapi.psc.devices_query import DeviceSearchQuery
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process, Watchlist, Report, Feed
-from cbapi.psc.threathunter.query import Query
-
-from cbinterface.helpers import is_psc_guid, clean_exit, input_with_timeout
-from cbinterface.psc.query import make_process_query, print_facet_histogram, yield_events
-from cbinterface.psc.ubs import (
+from cbc_sdk import __file__ as cbc_sdk_file_path
+from cbc_sdk.platform.devices import Device, DeviceSearchQuery
+from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
+from cbc_sdk.enterprise_edr import Watchlist, Feed
+from cbc_sdk import CBCloudAPI
+from cbc_sdk.platform import Process
+from cbinterface.helpers import is_eedr_guid, clean_exit, input_with_timeout
+from cbinterface.enterprise_edr.query import make_process_query, print_facet_histogram, yield_events
+from cbinterface.enterprise_edr.ubs import (
     request_and_get_files,
     get_file_metadata,
     get_device_summary,
@@ -29,8 +28,8 @@ from cbinterface.psc.ubs import (
     get_file_path_summary,
     consolidate_metadata_and_summaries,
 )
-from cbinterface.psc.intel import (
-    convert_response_watchlists_to_psc_edr_watchlists,
+from cbinterface.enterprise_edr.intel import (
+    convert_response_watchlists_to_enterprise_edr_watchlists,
     get_all_watchlists,
     get_watchlist,
     get_report,
@@ -38,13 +37,13 @@ from cbinterface.psc.intel import (
     get_report_with_IOC_status,
     print_report,
     interactively_update_report_ioc_query,
-    convert_response_watchlists_to_single_psc_edr_watchlist,
+    convert_response_watchlists_to_single_enterprise_edr_watchlist,
     get_all_feeds,
     get_feed,
     get_feed_report,
     get_alert,
-    get_all_alerts,
-    update_alert_state,
+    yield_alerts,
+    update_alert_status,
     interactively_update_alert_state,
     get_watchlists_like_name,
     search_feed_names,
@@ -55,7 +54,7 @@ from cbinterface.psc.intel import (
     write_basic_report_template,
     backup_watchlist_threat_reports,
 )
-from cbinterface.psc.device import (
+from cbinterface.enterprise_edr.device import (
     make_device_query,
     device_info,
     time_since_checkin,
@@ -63,8 +62,7 @@ from cbinterface.psc.device import (
     is_device_online,
     yield_devices,
 )
-from cbinterface.psc.process import (
-    select_process,
+from cbinterface.enterprise_edr.process import (
     print_process_info,
     print_ancestry,
     print_process_tree,
@@ -98,7 +96,7 @@ from cbinterface.commands import (
     CreateRegKey,
     GetSystemMemoryDump,
 )
-from cbinterface.psc.sessions import (
+from cbinterface.enterprise_edr.sessions import (
     CustomLiveResponseSessionManager,
     get_session_by_id,
     device_live_response_sessions_by_device_id,
@@ -108,7 +106,7 @@ from cbinterface.psc.sessions import (
     get_file_content,
     close_session_by_id,
 )
-from cbinterface.psc.enumerations import logon_history
+from cbinterface.enterprise_edr.enumerations import logon_history
 from cbinterface.config import (
     get_playbook_map,
     add_watchlist_id_to_intel_backup_list,
@@ -117,12 +115,10 @@ from cbinterface.config import (
 )
 from cbinterface.scripted_live_response import build_playbook_commands, build_remediation_commands
 
-LOGGER = logging.getLogger("cbinterface.psc.cli")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.cli")
 
 
-def toggle_device_quarantine(
-    cb: CbThreatHunterAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool
-) -> bool:
+def toggle_device_quarantine(cb: CBCloudAPI, devices: Union[DeviceSearchQuery, List[Device]], quarantine: bool) -> bool:
     """Toggle device quarantine state.
 
     Args:
@@ -132,7 +128,7 @@ def toggle_device_quarantine(
     if len(devices) > 0:
         if len(devices) > 10 and quarantine:
             LOGGER.error(
-                f"For now, not going to quarnantine {len(devices)} devices as a safe gaurd "
+                f"For now, not going to quarantine {len(devices)} devices as a safeguard "
                 f"to prevent mass device impact... use the GUI if you must."
             )
             return False
@@ -140,7 +136,6 @@ def toggle_device_quarantine(
         emotion = "👀" if quarantine else "👏"
         LOGGER.info(f"setting {verbiage} on {len(devices)} devices... {emotion}")
 
-        device_ids = []
         for d in devices:
             if d.quarantined == quarantine:
                 LOGGER.warning(f"device {d.id}:{d.name} is already set to {verbiage}.")
@@ -149,15 +144,14 @@ def toggle_device_quarantine(
                 LOGGER.info(f"device {d.id}:{d.name} hasn't checked in for: {time_since_checkin(d, refresh=False)}")
                 LOGGER.warning(f"device {d.id}:{d.name} appears offline 💤")
                 LOGGER.info(f"device {d.id}:{d.name} will change quarantine state when it comes online 👌")
-            device_ids.append(d.id)
-            cb.device_quarantine(device_ids, quarantine)
+            cb.device_quarantine([d.id], quarantine)
         return True
 
 
-def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
-    """Given an argument parser subparser, build a psc specific parser."""
-    # device query (psc)
-    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query (PSC).")
+def add_eedr_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
+    """Given an argument parser subparser, build a EEDR specific parser."""
+    # device query
+    parser_sensor = subparsers.add_parser("device", aliases=["d"], help="Execute a device query.")
     parser_sensor.add_argument("device_query", help="the device query you'd like to execute. 'FIELDS' for help.")
     parser_sensor.add_argument(
         "-nw",
@@ -270,7 +264,9 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     intel_subparsers = parser_intel.add_subparsers(dest="intel_command")
 
     # intel watchlists
-    parser_intel_watchlists = intel_subparsers.add_parser("watchlists", help="Interface with PSC Watchlists.")
+    parser_intel_watchlists = intel_subparsers.add_parser(
+        "watchlists", help="Interface with Enterprise EDR Watchlists."
+    )
     parser_intel_watchlists.add_argument("-lw", "--list-watchlists", action="store_true", help="List all watchlists.")
     parser_intel_watchlists.add_argument("-w", "--get-watchlist", action="store", help="Get watchlist by ID.")
     parser_intel_watchlists.add_argument(
@@ -286,7 +282,7 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
         "-wt",
         "--write-basic-threat-report-template",
         action="store_true",
-        help="Write a basic singel query IOC threat report template.",
+        help="Write a basic single query IOC threat report template.",
     )
     parser_intel_watchlists.add_argument(
         "--update-ioc-query",
@@ -310,7 +306,7 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
     # intel feeds
-    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with PSC Feeds.")
+    parser_intel_feeds = intel_subparsers.add_parser("feeds", help="Interface with Enterprise EDR Feeds.")
     parser_intel_feeds.add_argument("-lf", "--list-feeds", action="store_true", help="List all Feeds, public included.")
     parser_intel_feeds.add_argument(
         "-f",
@@ -329,24 +325,38 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     )
 
     # alert parser plopped in here under intel
-    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with PSC Alerts.")
+    parser_intel_alerts = intel_subparsers.add_parser("alerts", help="Interface with Alerts.")
     parser_intel_alerts.add_argument(
         "-a", "--alert-id", dest="alert_ids", default=[], action="append", help="List alert IDs to work with."
     )
     parser_intel_alerts.add_argument("-g", "--get-alert", action="store_true", help="Get Alert information.")
-    parser_intel_alerts.add_argument("-d", "--dismiss-alert", action="store_true", help="Dismiss an Alerts.")
-    parser_intel_alerts.add_argument("-o", "--open-alert", action="store_true", help="Set Alerts to Open (un-dismiss).")
     parser_intel_alerts.add_argument(
-        "-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively."
+        "-s",
+        "--alerts-status",
+        action="store",
+        choices=["OPEN", "IN_PROGRESS", "CLOSED"],
+        help="Set the status of Alerts.",
     )
+    parser_intel_alerts.add_argument(
+        "-d",
+        "--determination",
+        action="store",
+        choices=["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"],
+        help="Set the determination of Alerts. (Optional)",
+    )
+
     parser_intel_alerts.add_argument(
         "-r",
-        "--remediation-state",
+        "--closure-reason",
         action="store",
-        help="An Alert remediation state to use with any state change actions.",
+        choices=["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"],
+        help="Reason code for why the Alerts are being updated. (Optional)",
     )
     parser_intel_alerts.add_argument(
-        "-c", "--comment", action="store", help="An Alert comment to use with any state change actions."
+        "-n", "--note", action="store", help="Custom message to add to the note added to each modified aler. (Optional)"
+    )
+    parser_intel_alerts.add_argument(
+        "-u", "--interactively-update-alert", action="store_true", help="Update Alerts interactively."
     )
     parser_intel_alerts.add_argument(
         "--from-stdin", action="store_true", help="Read alert IDs from stdin to work with."
@@ -357,33 +367,72 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_alerts_search = intel_alerts_subparsers.add_parser(
         "search", help="Search Alerts with lucene syntax queries and/or value searches."
     )
-    parser_intel_alerts_search.add_argument("alert_query", action="store", help="The Alert search query.")
-    # TODO Add other arguments to allow for searching via start & end times, specifying rows, start, alert state
     parser_intel_alerts_search.add_argument(
-        "-cr",
-        "--create_time-range",
+        "alert_query",
         action="store",
-        help="Only return alerts created over the previous time range. format:integer_quantity,time_unit ; time_unit in [s,m,h,d,w,y]",
+        help="The lucene-formatted Alert search query. Example: 'watchlists_id:a1B2c3D4zxc AND workflow_status:OPEN'",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-rt",
+        "--relative-time-range",
+        action="store",
+        help="Only return alerts created over the previous time range. Format: <integer_quantity><time_units>; time_units in [M, w, d, h, m, s]. Default=2w",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-et",
+        "--explicit-time-range",
+        action="store",
+        help="Need to specify both start and end timestamps (ISO 8601) separated by a comma. Example: '2024-04-01T01:02:30.000Z,2024-04-03T04:05:06.000Z'",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-c",
+        "--criteria",
+        action="store",
+        type=json.loads,
+        help='Add criteria to the query. Example: \'{"device_os": ["WINDOWS"]}\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-ex",
+        "--exclusions",
+        action="store",
+        type=json.loads,
+        help='Add exclusions to the query. Example: \'{"device_location": ["UNKNOWN"], "device_os_version": ["Windows 11 x64"}]\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-so",
+        "--sort",
+        action="store",
+        default=[{"field": "backend_update_timestamp", "order": "ASC"}],
+        type=json.loads,
+        help='Sort the results. Default=\'[{"field": "backend_update_timestamp", "order": "ASC"}]\'',
+    )
+    parser_intel_alerts_search.add_argument(
+        "-st",
+        "--pagination-start",
+        action="store",
+        default=1,
+        type=int,
+        help="One-based index of the first result to retrieve. Must be a whole number greater than or equal to 1. Default=1",
+    )
+    parser_intel_alerts_search.add_argument(
+        "-r",
+        "--rows",
+        action="store",
+        default=100,
+        type=int,
+        help="The number of rows to return starting from the pagination start. Increase this value in large queries to reduce waiting time. Default=100",
     )
     parser_intel_alerts_search.add_argument(
         "-m",
         "--max-alerts-result",
         action="store",
-        default=100,
+        default=500,
         type=int,
-        help="Only return up to this many alerts. Default=100. HINT: set to '0' to return all results.",
+        help="Only return up to this many alerts. The maximum number of alerts is 10000. Default=500",
     )
-    parser_intel_alerts_search.add_argument(
-        "-as",
-        "--alert-states",
-        action="append",
-        choices=["DISMISSED", "OPEN"],
-        help="Only return Alerts in these states.",
-    )
-
-    # cb response to psc migration parser
+    # cb response to enterprise edr migration parser
     parser_intel_migration = intel_subparsers.add_parser(
-        "migrate", help="Utilities for migrating response watchlists to PSC EDR intel."
+        "migrate", help="Utilities for migrating response watchlists to Enterprise EDR intel."
     )
     parser_intel_migration.add_argument(
         "response_watchlist_json_data_path",
@@ -392,26 +441,27 @@ def add_psc_arguments_to_parser(subparsers: argparse.ArgumentParser) -> None:
     parser_intel_migration.add_argument(
         "--one-for-one",
         action="store_true",
-        help="Create a PSC Watchlist for every CbR watchlist that passes validation.",
+        help="Create a Enterprise EDR Watchlist for every CbR watchlist that passes validation.",
     )
     parser_intel_migration.add_argument(
         "--many-to-one",
         action="store_true",
-        help="Create a single PSC Watchlist containing all CbR watchlist queries that pass validation.",
+        help="Create a single Enterprise EDR Watchlist containing all CbR watchlist queries that pass validation.",
     )
 
 
-def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespace) -> bool:
-    """The logic to execute psc ThreatHunter specific command line arguments.
+def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
+    """The logic to execute EEDR specific command line arguments.
 
     Args:
-        cb: CbThreatHunterAPI
+        cb: CBCloudAPI
         args: parsed argparse namespace
+
     Returns:
         True or None on success, False on failure.
     """
-    if not isinstance(cb, CbThreatHunterAPI):
-        LOGGER.critical(f"Requires Cb PSC based API. Got '{product}' API.")
+    if not isinstance(cb, CBCloudAPI):
+        LOGGER.critical(f"Requires Cb Enterprise EDR based API. Got '{args.product}' API.")
         return False
 
     # UBS #
@@ -423,7 +473,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
             set_ubs_args = [arg for arg, value in vars(args).items() if arg.startswith("ubs_") and value is True]
             if not set_ubs_args:
-                LOGGER.debug(f"seting ubs metadata argument as default.")
+                LOGGER.debug("seting ubs metadata argument as default.")
                 args.ubs_get_metadata = True
 
             if args.ubs_get_file:
@@ -450,7 +500,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if results:
                     print(json.dumps(results, indent=2))
         else:
-            LOGGER.error(f"You must specify at least one sha256 with the `--sha256` argument.")
+            LOGGER.error("You must specify at least one sha256 with the `--sha256` argument.")
             return False
 
         return True
@@ -470,16 +520,32 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         if args.intel_command == "alerts":
 
-            if args.intel_alerts_command == "search":  #'device_name': ['XW7R17'],
-                # NOTE TODO: implement start and end time argparse options
-                # criteria = {'last_event_time': {'start': '2021-04-13T19:39:30.054855+00:00', 'end': '2021-04-14T19:39:30.054855+00:00'}, 'workflow': ['OPEN']}
-                if args.create_time_range:
-                    criteria["create_time"] = {"range": f"-{args.create_time_range}"}
-                results = get_all_alerts(
-                    cb, query=args.alert_query, workflow_state=args.alert_states, max_results=args.max_alerts_result
+            if args.intel_alerts_command == "search":
+                if args.relative_time_range and args.explicit_time_range:
+                    logging.error("You can only use either explicit or relative time range. Try again.")
+                    return False
+                time_range = None
+                if args.relative_time_range:
+                    time_range = {"range": f"-{args.relative_time_range}"}
+                elif args.explicit_time_range:
+                    start, end = args.explicit_time_range.split(",")
+                    time_range = {"start": start.strip(), "end": end.strip()}
+                results = list(
+                    yield_alerts(
+                        cb,
+                        args.alert_query,
+                        time_range,
+                        args.criteria,
+                        args.exclusions,
+                        args.sort,
+                        args.pagination_start,
+                        args.rows,
+                        args.max_alerts_result,
+                    )
                 )
                 if results:
                     print(json.dumps(results, indent=2))
+                    print(f"\nTotal alerts {len(results)}")
 
                 return True
 
@@ -487,7 +553,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 args.alert_ids.extend([line.strip().strip('"') for line in sys.stdin])
 
             if not args.alert_ids:
-                LOGGER.error(f"You have to supply at least one alert ID.")
+                LOGGER.error("You have to supply at least one alert ID.")
                 return False
 
             if args.get_alert:
@@ -495,27 +561,15 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 if alerts:
                     print(json.dumps(alerts, indent=2))
 
-            if args.open_alert:
-                results = [
-                    update_alert_state(
-                        cb, alert_id, state="OPEN", remediation_state=args.remediation_state, comment=args.comment
-                    )
-                    for alert_id in args.alert_ids
-                ]
-                if result:
-                    print(json.dumps(results, indent=2))
-
-            if args.dismiss_alert:
-                results = [
-                    update_alert_state(
-                        cb,
-                        alert_id,
-                        state="DISMISSED",
-                        remediation_state=args.remediation_state,
-                        comment=args.comment,
-                    )
-                    for alert_id in args.alert_ids
-                ]
+            if args.alerts_status:
+                results = update_alert_status(
+                    cb,
+                    args.alert_ids,
+                    status=args.alerts_status,
+                    determination=args.determination,
+                    closure_reason=args.closure_reason,
+                    note=args.note,
+                )
                 if results:
                     print(json.dumps(results, indent=2))
 
@@ -530,16 +584,16 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 response_watchlists = json.load(fp)
 
             if args.one_for_one:
-                results = convert_response_watchlists_to_psc_edr_watchlists(cb, response_watchlists)
+                results = convert_response_watchlists_to_enterprise_edr_watchlists(cb, response_watchlists)
                 LOGGER.info(
-                    f"created {len(results)} PSC watchlists from {len(response_watchlists)} Response watchlists."
+                    f"created {len(results)} Enterprise EDR watchlists from {len(response_watchlists)} Response watchlists."
                 )
                 print("Created watchlists:")
                 for wl in results:
                     print(f" + ID={wl['id']} - Title={wl['name']}")
 
             if args.many_to_one:
-                watchlist = convert_response_watchlists_to_single_psc_edr_watchlist(cb, response_watchlists)
+                watchlist = convert_response_watchlists_to_single_enterprise_edr_watchlist(cb, response_watchlists)
                 if not watchlist:
                     return False
                 LOGGER.info(
@@ -555,12 +609,11 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 with open(args.report_path, "r") as fp:
                     report_data = json.load(fp)
                 if not report_data:
-                    LOGGER.error(f"failed to load report data")
+                    LOGGER.error("failed to load report data")
                     return False
                 watchlist_data = create_new_report_and_append_to_watchlist(cb, args.watchlist_id, report_data)
                 if watchlist_data:
-                    LOGGER.info(f"successfully appended new threat report to watchlist.")
-                return True
+                    return True
 
             if args.write_basic_threat_report_template:
                 result = write_basic_report_template()
@@ -603,7 +656,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             if args.delete_watchlist_report:
                 result = delete_report(cb, args.delete_watchlist_report)
                 if result.status_code == 204:
-                    LOGGER.info(f"deleted watchlist report")
+                    LOGGER.info("deleted watchlist report")
 
             if args.update_ioc_query:
                 report_id, ioc_id = args.update_ioc_query.split("/", 1)
@@ -614,6 +667,8 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             if args.get_ioc_status:
                 report_id, ioc_id = args.get_ioc_status.split("/", 1)
                 status = is_ioc_ignored(cb, report_id, ioc_id, check_existence=True)
+                if status is None:
+                    return False
                 status = "IGNORED" if status else "ACTIVE"
                 print(f"IOC ID={ioc_id} in Report ID={report_id} is {status}")
 
@@ -640,7 +695,6 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                     for f in feeds:
                         print(Feed(cb, initial_data=f))
                         print()
-
             if args.get_feed:
                 feed = get_feed(cb, args.get_feed)
                 if not feed:
@@ -671,15 +725,14 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
         return True
 
-    # Device Quering #
+    # Device Querying #
     if args.command and args.command.startswith("d"):
         LOGGER.info(f"searching {args.environment} environment for device query: {args.device_query}...")
         if args.device_query.upper() == "FIELDS":
-            device_meta_file = os.path.join(os.path.dirname(cbapi_file_path), "psc/defense/models/deviceInfo.yaml")
+            device_meta_file = os.path.join(os.path.dirname(cbc_sdk_file_path), "platform/models/device.yaml")
             model_data = {}
             with open(device_meta_file, "r") as fp:
                 model_data = yaml.safe_load(fp.read())
-            possibly_searchable_props = list(model_data["properties"].keys())
             print("Device model fields:")
             for field_name in list(model_data["properties"].keys()):
                 print(f"\t{field_name}")
@@ -718,7 +771,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print_results = True if print_results.lower() == "y" else False
 
         if len(devices) > 0 and print_results:
-            print("\n------------------------- PSC DEVICE RESULTS -------------------------")
+            print("\n------------------------- ENTERPRISE EDR DEVICE RESULTS -------------------------")
             for device in devices:
                 if args.all_details:
                     print()
@@ -730,7 +783,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             print()
         return True
 
-    # Process Quering #
+    # Process Querying #
     if args.command and (args.command.startswith("q") or args.command == "pq"):
         LOGGER.info(f"searching {args.environment} environment..")
 
@@ -745,19 +798,32 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         processes = make_process_query(
             cb,
             args.query,
+            fields=[
+                "*",
+                "device_os",
+                "device_external_ip",
+                "device_internal_ip",
+                "parent_hash",
+                "parent_name",
+                "process_reputation",
+                "process_start_time",
+                "process_cmdline",
+                "parent_guid",
+            ],
             start_time=args.start_time,
             last_time=args.last_time,
-            raise_exceptions=False,
+            raise_exceptions=True,
             validate_query=True,
         )
 
         if args.facets:
             LOGGER.info("getting facet data...")
-            print_facet_histogram(processes)
+            # print_facet_histogram(processes) - unvailable with CBC SDK
             # NOTE TODO - pick this v2 back up and see if it's more efficient to use
             # knowing we have to remember the childproc_name facet data we like.
-            # from cbinterface.psc.query import print_facet_histogram_v2
-            # print_facet_histogram_v2(cb, args.query)
+            from cbinterface.enterprise_edr.query import print_facet_histogram_v2
+
+            print_facet_histogram_v2(cb, args.query, args.start_time, args.last_time)
 
         # don't display large results by default
         print_results = True
@@ -778,7 +844,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         return True
 
     # Enumerations #
-    if args.command and args.command == "enumerate":
+    if args.command and args.command in ["enumerate", "e"]:
         if args.logon_history:
             logon_history(cb, args.logon_history)
             return
@@ -786,16 +852,33 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
     # Process Inspection #
     if args.command and (args.command == "proc" or args.command.startswith("i")):
         process_id = args.process_guid_options
-        if not is_psc_guid(process_id):
+        if not is_eedr_guid(process_id):
             # check to see if the analyst passed a local file path, which we assume is a local process json file
             # if os.path.exists(args.process_guid_options):
             # XXX NOTE: create functionality sourced from process json file?
-            LOGGER.error(f"{process_id} is not in the form of a CbThreathunter process guid.")
+            LOGGER.error(f"{process_id} is not in the form of a CB Cloud process guid.")
             return False
 
         try:
-            # proc = Process(cb, process_id)
-            proc = select_process(cb, process_id)
+            proc = make_process_query(
+                cb,
+                f"process_guid:{process_id}",
+                fields=[
+                    "*",
+                    "device_os",
+                    "device_external_ip",
+                    "device_internal_ip",
+                    "parent_hash",
+                    "parent_name",
+                    "process_reputation",
+                    "process_start_time",
+                    "process_cmdline",
+                    "process_terminated",
+                ],
+                raise_exceptions=True,
+                validate_query=False,
+                silent=True,
+            ).first()
             if not proc:
                 LOGGER.warning(f"Process data does not exist for GUID={process_id}")
                 return False
@@ -842,7 +925,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             iarg for iarg, value in vars(args).items() if iarg.startswith("inspect_") and value is True
         ]
         if not set_inspection_args:
-            LOGGER.debug(f"seting all inspection arguments.")
+            LOGGER.debug("seting all inspection arguments.")
             for iarg in all_inspection_args:
                 args.__setattr__(iarg, True)
 
@@ -895,7 +978,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
         # store a list of commands to execute on this device
         commands = []
 
-        LOGGER.info(f"searching for device...")
+        LOGGER.info("searching for device...")
         device = None
         try:  # if device.id
             device = Device(cb, args.name_or_id)
@@ -903,7 +986,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
             device = find_device_by_hostname(cb, args.name_or_id)
 
         if not device:
-            LOGGER.info(f"could not find a device.")
+            LOGGER.info("could not find a device.")
             return None
 
         if args.execute_command:
@@ -1046,7 +1129,7 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
                 timeout = timeout * 86400
 
             if not session_manager.wait_for_active_session(device, timeout=timeout):
-                LOGGER.error(f"reached timeout waiting for active session.")
+                LOGGER.error("reached timeout waiting for active session.")
                 return False
 
             # we have an active session, issue the commands.
@@ -1059,12 +1142,12 @@ def execute_threathunter_arguments(cb: CbThreatHunterAPI, args: argparse.Namespa
 
     # Direct Session Interaction #
     if args.command and args.command.startswith("sess"):
-        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
 
         # if args.list_all_sessions:
-        # Not implemented with PSC
+        # Not implemented with Enterprise EDR
         # if args.list_sensor_sessions:
-        # Not implemented with PSC
+        # Not implemented with Enterprise EDR
 
         if args.get_session_command_list:
             print(json.dumps(get_session_commands(cblr, args.get_session_command_list), indent=2, sort_keys=True))

@@ -53,7 +53,7 @@ def test_dummy_process(monkeypatch):
 
 def test_make_device_query(monkeypatch):
     from cbapi.psc.devices_query import DeviceSearchQuery
-    from cbinterface.psc.device import make_device_query
+    from cbinterface.enterprise_edr.device import make_device_query
 
     def _count(self):
         return 0
@@ -65,7 +65,7 @@ def test_make_device_query(monkeypatch):
 
 def test_make_process_query(monkeypatch):
     from cbapi.psc.threathunter.models import AsyncProcessQuery
-    from cbinterface.psc.query import make_process_query
+    from cbinterface.enterprise_edr.query import make_process_query
 
     cb = fake_cb_api(monkeypatch)
     assert isinstance(make_process_query(cb, "process_name:loop.exe", raise_exceptions=False), AsyncProcessQuery)
@@ -73,8 +73,8 @@ def test_make_process_query(monkeypatch):
 
 def test_is_valid_process_query(monkeypatch):
     from cbapi.psc.threathunter.models import AsyncProcessQuery
-    from cbinterface.psc.query import make_process_query
-    from cbinterface.psc.query import is_valid_process_query
+    from cbinterface.enterprise_edr.query import make_process_query
+    from cbinterface.enterprise_edr.query import is_valid_process_query
 
     def _get_object(url, query_parameters):
         assert url == "/api/investigate/v1/orgs/ork_gey/processes/search_validation"
@@ -88,7 +88,7 @@ def test_is_valid_process_query(monkeypatch):
 
 
 def test_is_process_loaded(monkeypatch):
-    from cbinterface.psc.process import is_process_loaded
+    from cbinterface.enterprise_edr.process import is_process_loaded
 
     p = load_dummy_process(monkeypatch)
     assert is_process_loaded(p) is True
@@ -96,7 +96,7 @@ def test_is_process_loaded(monkeypatch):
 
 def test_process_to_dict(monkeypatch, mocker):
     from cbapi.psc.threathunter.models import Event
-    from cbinterface.psc.process import process_to_dict
+    from cbinterface.enterprise_edr.process import process_to_dict
 
     data = get_dummy_process_data()
     p = load_dummy_process(monkeypatch)
@@ -105,9 +105,9 @@ def test_process_to_dict(monkeypatch, mocker):
     for etype in p._events.keys():
         all_events.extend(data["events"][etype])
 
-    mocker.patch("cbinterface.psc.process.yield_events", return_value=all_events)
-    mocker.patch("cbinterface.psc.process.print_ancestry", return_value=data["process_ancestry"])
-    mocker.patch("cbinterface.psc.process.print_process_tree", return_value=data["process_tree"])
+    mocker.patch("cbinterface.enterprise_edr.process.yield_events", return_value=all_events)
+    mocker.patch("cbinterface.enterprise_edr.process.print_ancestry", return_value=data["process_ancestry"])
+    mocker.patch("cbinterface.enterprise_edr.process.print_process_tree", return_value=data["process_tree"])
     process_dict = process_to_dict(p)
     assert isinstance(process_dict, dict)
     assert process_dict.keys() == data.keys()

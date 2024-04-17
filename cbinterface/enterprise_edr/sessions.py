@@ -22,9 +22,9 @@ from cbapi.errors import ObjectNotFoundError, TimeoutError
 from typing import List, Union
 
 from cbinterface.commands import BaseSessionCommand
-from cbinterface.psc.device import is_device_online
+from cbinterface.enterprise_edr.device import is_device_online
 
-LOGGER = logging.getLogger("cbinterface.psc.session")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.session")
 
 CBLR_BASE = "/integrationServices/v3/cblr"
 
@@ -102,12 +102,12 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
         return session
 
     def submit_command(self, command: BaseSessionCommand, device: Union[int, Device]):
-        """
-        Create a new job to be executed as a Live Response.
+        """Create a new job to be executed as a Live Response.
 
         Args:
             command (BaseSessionCommand): The job to be scheduled.
             device (Device): Device to execute job on.
+
         Returns:
             Future: A reference to the running job.
         """

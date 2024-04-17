@@ -2,37 +2,38 @@
 
 IOCs, Reports, Watchlists, Feeds, Alerts.
 
-NOTE on Response Watchlist to PSC EDR Intel Migrations:
+NOTE on Response Watchlist to Enterprise EDR Intel Migrations:
 
-  There are three different ways that I built to migrate Response 
-  Watchlists to PSC EDR Watchlists:
+  There are three different ways that I built to migrate Response
+  Watchlists to Enterprise EDR Watchlists:
    1. One-to-One
    2. Many-to-One
    3. Many-to-Two (Not connected to CLI)
 
  All of the above use the `yield_reports_created_from_response_watchlists` to convert
- Response Watchlists into PSC EDR Reports. That function converts the Response queries to
- valid PSC EDR queries. If a query doesn't validate/convert, a log is generated and it's 
+ Response Watchlists into Enterprise EDR Reports. That function converts the Response queries to
+ valid Enterprise EDR queries. If a query doesn't validate/convert, a log is generated and it's
  skipped. If it does validate, a Report is generated. If the Watchlist, in Response, was really slow or
- had errors the resulting PSC EDR Report will be set to "ignore" automatically. Additionally, I passed
+ had errors the resulting Enterprise EDR Report will be set to "ignore" automatically. Additionally, I passed
  all the available context about the Response Watchlist into the description of the resulting Reports.
 
  We had over 300 custom Response Watchlists, here is what I did for our use case:
-  1. I seperated the watchlists with true positive detections and low FP rates 
+  1. I seperated the watchlists with true positive detections and low FP rates
      using our ACE Alert metrics. I put the names of these Watchlists into a txt file
      and then exported them from response using the following command:
        `cat ~smcfeely/working/cbmigration/uniq.high_fidelity.watchlists.txt | cbinterface response_watchlist --watchlist-names-from-stdin -json > high_fid.response_watchlists.json`
 
   2. Next, I used the command below to import these Response Watchlists into a single
-     PSC EDR Watchlist I called "ACE Higher Fidelity Response Watchlists":
+     Enterprise EDR Watchlist I called "ACE Higher Fidelity Response Watchlists":
        `cbinterface intel migrate ~smcfeely/working/cbmigration/high_fid.response_watchlists.json --many-to-one`
 
   3. After that, I exported the remaining custom Response Watchlists into another json file and called the
-     `convert_response_watchlists_to_grouped_psc_edr_watchlists` function from a python terminal to organize 
-     the Response Watchlists into *two* PSC EDR Watchlists, one for Response Watchlists that have never
-     had a hit and then the ones remaining are lower fidelity and went into a "Low Fidelity" PSC EDR Watchlist.
-        
+     `convert_response_watchlists_to_grouped_enterprise_edr_watchlists` function from a python terminal to organize
+     the Response Watchlists into *two* Enterprise EDR Watchlists, one for Response Watchlists that have never
+     had a hit and then the ones remaining are lower fidelity and went into a "Low Fidelity" Enterprise EDR Watchlist.
+
 """
+
 import os
 import json
 import time
@@ -41,34 +42,22 @@ import logging
 from dateutil import tz
 from dateutil.parser import parse as parse_timestamp
 from datetime import datetime
-from typing import Dict, List, Union
+from typing import Dict, List, Literal
 
-from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
+from cbc_sdk import CBCloudAPI
+from cbc_sdk.platform import Alert
+from cbc_sdk.errors import ServerError, ClientError, ObjectNotFoundError
 
-LOGGER = logging.getLogger("cbinterface.psc.intel")
+LOGGER = logging.getLogger("cbinterface.enterprise_edr.intel")
 
 
 ## Alerts ##
-def alert_search(
-    cb: CbThreatHunterAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
-    query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "first_event_time", "order": "DESC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-) -> Dict:
-    """Perform an Alert search
+def alert_search(cb: CBCloudAPI, search_data: Dict) -> Dict:
+    """Perform an Alert search.
 
     One request and return the result.
     """
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/watchlist/_search"
-    if not search_data:
-        if "workflow" not in criteria:
-            criteria["workflow"] = workflow_state
-        search_data = {"criteria": criteria, "query": query, "rows": rows, "start": start, "sort": sort}
+    url = f"/api/alerts/v7/orgs/{cb.credentials.org_key}/alerts/_search"
     try:
         result = cb.post_object(url, search_data)
         return result.json()
@@ -85,100 +74,68 @@ def alert_search(
 
 
 def yield_alerts(
-    cb: CbThreatHunterAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
+    cb: CBCloudAPI,
     query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-    max_results: int = None,  # limit results returned
+    time_range: Dict = None,
+    criteria: Dict = None,
+    exclusions: Dict = None,
+    sort: List[Dict] = [{"field": "backend_update_timestamp", "order": "ASC"}],
+    start: int = 1,
+    rows: int = 100,
+    max_results: int = 500,  # limit results returned
 ) -> Dict:
     """Yield Alerts resulting from alert search."""
-    position = start
+    data = {k: v for k, v in locals().items() if v is not None and k not in ["max_results", "cb"]}
     still_querying = True
     while still_querying:
-        if max_results and position + rows > max_results:
+        if max_results and data["start"] + rows > max_results:
             # get however many rows that may result in max_results
-            rows = max_results - position
-        result = alert_search(
-            cb,
-            search_data=search_data,
-            criteria=criteria,
-            query=query,
-            rows=rows,
-            sort=sort,
-            start=position,
-            workflow_state=workflow_state,
-        )
+            rows = max_results - data["start"]
+        result = alert_search(cb, data)
 
         if not result:
             return result
-
         total_results = result["num_found"]
         results = result.get("results", [])
-        LOGGER.debug(f"got {len(results)+position} out of {total_results} total alerts.")
+        LOGGER.debug(f"got {len(results)+data['start']-1} out of {total_results} total alerts.")
         for item in results:
             yield item
-            position += 1
-            if max_results and position >= max_results:
+            data["start"] += 1
+            if max_results and data["start"] >= max_results:
                 still_querying = False
                 break
 
-        if position >= total_results:
+        if data["start"] >= total_results:
             still_querying = False
             break
 
 
-def get_all_alerts(
-    cb: CbThreatHunterAPI,
-    search_data: Dict = {},
-    criteria: Dict = {},
-    query: str = None,
-    rows=40,
-    sort: List[Dict] = [{"field": "last_update_time", "order": "ASC"}],
-    start: int = 0,
-    workflow_state=["OPEN", "DISMISSED"],
-    max_results: int = None,  # limit results returned
-) -> Dict:
-    """Return list of Alerts resulting from alert search."""
-    return list(
-        yield_alerts(
-            cb,
-            search_data=search_data,
-            criteria=criteria,
-            query=query,
-            rows=rows,
-            sort=sort,
-            start=start,
-            workflow_state=workflow_state,
-            max_results=max_results,
-        )
-    )
-
-
-def get_alert(cb: CbThreatHunterAPI, alert_id) -> Dict:
+def get_alert(cb: CBCloudAPI, alert_id) -> Dict:
     """Get alert by ID."""
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
+    url = f"/api/alerts/v7/orgs/{cb.credentials.org_key}/alerts/{alert_id}"
     try:
         return cb.get_object(url)
-    except ServerError:
-        LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
+    except ServerError as e:
+        LOGGER.error(f"Caught ServerError getting report {alert_id}: {e}")
 
 
-def update_alert_state(
-    cb: CbThreatHunterAPI,
-    alert_id,
-    state: Union["DISMISSED", "OPEN"],
-    remediation_state: str = None,
-    comment: str = None,
+def update_alert_status(
+    cb: CBCloudAPI,
+    alert_ids: List[str],
+    status: Literal["OPEN", "IN_PROGRESS", "CLOSED"],
+    determination: Literal["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"],
+    closure_reason: Literal["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"],
+    note: str = None,
 ) -> Dict:
-    """Update alert remediation state by ID."""
-    url = f"/appservices/v6/orgs/{cb.credentials.org_key}/alerts/{alert_id}/workflow"
-    remediation = {"state": state, "remediation_state": remediation_state, "comment": comment}
+    """Update alerts state."""
+    data = {k: v for k, v in locals().items() if v is not None and k not in ["cb", "alert_ids"]}
+    alert_query = cb.select(Alert).add_criteria("id", alert_ids)
+    job = alert_query.update(**data)
     try:
-        return cb.post_object(url, remediation).json()
+        alert_query = cb.select(Alert).add_criteria("id", alert_ids)
+        job = alert_query.update(**data)
+        job.await_completion().result()
+        return job.to_json()
     except ServerError as e:
         LOGGER.error(f"Caught ServerError: {e}")
         return False
@@ -188,29 +145,47 @@ def update_alert_state(
 
 
 def interactively_update_alert_state(
-    cb: CbThreatHunterAPI,
+    cb: CBCloudAPI,
     alert_id,
-    state: Union["DISMISSED", "OPEN"] = None,
-    remediation_state: str = None,
-    comment: str = None,
+    status: Literal["OPEN", "IN_PROGRESS", "CLOSED"] = None,
+    determination: Literal["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE"] = None,
+    closure_reason: Literal["NO_REASON", "RESOLVED", "RESOLVED_BENIGN_KNOWN_GOOD", "DUPLICATE_CLEANUP", "OTHER"] = None,
+    note: str = None,
 ) -> Dict:
     """Update alert remediation state by ID."""
     from cbinterface.helpers import input_with_timeout
 
-    if not state:
-        state = input_with_timeout("Alert state to set, DISMISSED or OPEN? [DISMISSED]: ") or "DISMISSED"
-        if state not in ["DISMISSED", "OPEN"]:
-            LOGGER.error(f"state must be one of [DISMISSED, OPEN], not {state}")
+    if not status:
+        status = input_with_timeout("Alert status to set, OPEN, IN_PROGRESS or CLOSED? [CLOSED]: ") or "CLOSED"
+        if status not in ["OPEN", "IN_PROGRESS", "CLOSED"]:
+            LOGGER.error(f"status must be one of [OPEN, IN_PROGRESS, CLOSED], not {status}")
             return False
-    if not remediation_state:
-        remediation_state = input_with_timeout("State of Remediation: ") or ""
-    if not comment:
-        comment = input_with_timeout("Comment: ") or ""
-    return update_alert_state(cb, alert_id, state, remediation_state, comment)
+    if not determination:
+        determination = input_with_timeout("Determination: ") or None
+        if determination not in ["TRUE_POSITIVE", "FALSE_POSITIVE", "NONE", None]:
+            LOGGER.error(f"determination must be one of [TRUE_POSITIVE, FALSE_POSITIVE, NONE], not {determination}")
+            return False
+    if not closure_reason:
+        closure_reason = input_with_timeout("Closure reason: ") or None
+        if closure_reason not in [
+            "NO_REASON",
+            "RESOLVED",
+            "RESOLVED_BENIGN_KNOWN_GOOD",
+            "DUPLICATE_CLEANUP",
+            "OTHER",
+            None,
+        ]:
+            LOGGER.error(
+                f"closure reason must be one of [NO_REASON, RESOLVED, RESOLVED_BENIGN_KNOWN_GOOD, DUPLICATE_CLEANUP, OTHER], not {closure_reason}"
+            )
+            return False
+    if not note:
+        note = input_with_timeout("Note: ") or None
+    return update_alert_status(cb, alert_id, status, determination, closure_reason, note)
 
 
 ## Reports ##
-def create_report(cb: CbThreatHunterAPI, report_data) -> Dict:
+def create_report(cb: CBCloudAPI, report_data) -> Dict:
     """Create an intel Report."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports"
     try:
@@ -224,56 +199,56 @@ def create_report(cb: CbThreatHunterAPI, report_data) -> Dict:
         return False
 
 
-def ignore_report(cb: CbThreatHunterAPI, report_id) -> Dict:
-    """Set this report to ignore status"""
+def ignore_report(cb: CBCloudAPI, report_id) -> Dict:
+    """Set this report to ignore status."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/ignore"
     try:
         return cb.put_object(url, {"ignore": True})
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
 
 
-def delete_report(cb: CbThreatHunterAPI, report_id) -> Dict:
-    """Set this report to ignore status"""
+def delete_report(cb: CBCloudAPI, report_id) -> Dict:
+    """Set this report to ignore status."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
     try:
         return cb.delete_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError deleting report {report_id}: {e}")
 
 
-def get_report_status(cb: CbThreatHunterAPI, report_id) -> Dict:
-    """Get report to ignore status"""
+def get_report_status(cb: CBCloudAPI, report_id) -> Dict:
+    """Get report to ignore status."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/ignore"
     try:
         return cb.get_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
 
 
-def activate_report(cb: CbThreatHunterAPI, report_id) -> Dict:
-    """Set this report to active status"""
+def activate_report(cb: CBCloudAPI, report_id) -> Dict:
+    """Set this report to active status."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/ignore"
     try:
         return cb.delete_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
 
 
-def get_report(cb: CbThreatHunterAPI, report_id) -> Dict:
+def get_report(cb: CBCloudAPI, report_id) -> Dict:
     """Get report by report id."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
     try:
         report = cb.get_object(url)
         report["ignored"] = get_report_status(cb, report["id"])["ignored"]
         return report
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting report {report_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"report {report_id} does not exist")
 
 
-def get_report_with_IOC_status(cb: CbThreatHunterAPI, report_id) -> Dict:
+def get_report_with_IOC_status(cb: CBCloudAPI, report_id) -> Dict:
     """Get report and include status of every report IOC."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs"
     report = get_report(cb, report_id)
@@ -284,7 +259,7 @@ def get_report_with_IOC_status(cb: CbThreatHunterAPI, report_id) -> Dict:
     return report
 
 
-def update_report(cb: CbThreatHunterAPI, report_id, report_data) -> Dict:
+def update_report(cb: CBCloudAPI, report_id, report_data) -> Dict:
     """Update an existing report."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}"
 
@@ -332,10 +307,10 @@ def write_basic_report_template() -> bool:
     return False
 
 
-def update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id, ioc_query_string) -> Dict:
+def update_report_ioc_query(cb: CBCloudAPI, report_id, ioc_id, ioc_query_string) -> Dict:
     """Update IOC query value with ioc_query_string.
 
-    A cbapi.errors.ClientError will be raised if the query is not valid.
+    A cbc_sdk.errors.ClientError will be raised if the query is not valid.
     """
     report_data = get_report_with_IOC_status(cb, report_id)
     for ioc in report_data["iocs_v2"]:
@@ -344,7 +319,7 @@ def update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id, ioc_query_
                 LOGGER.error(f"not a query based IOC: {ioc}")
                 return False
             if ioc["ignored"]:
-                LOGGER.warning(f"you're updating an IOC that is set to ignored.")
+                LOGGER.warning("you're updating an IOC that is set to ignored.")
             if len(ioc["values"]) > 1:
                 LOGGER.warning(
                     f"This query IOC has a surprising number of values that are about to be over-written: {ioc['values']}"
@@ -353,7 +328,7 @@ def update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id, ioc_query_
     return update_report(cb, report_id, report_data)
 
 
-def interactively_update_report_ioc_query(cb: CbThreatHunterAPI, report_id, ioc_id) -> Dict:
+def interactively_update_report_ioc_query(cb: CBCloudAPI, report_id, ioc_id) -> Dict:
     """Prompt user for new query and update the report IOC query."""
     from cbinterface.helpers import input_with_timeout
 
@@ -377,7 +352,7 @@ def print_report(report: Dict) -> None:
         if "iocs_v2" == field:
             continue
         print(f"\t{field}: {value}")
-    print(f"\tiocs_v2: ")
+    print("\tiocs_v2: ")
     for ioc in report["iocs_v2"]:
         for field, value in ioc.items():
             if field == "values":
@@ -390,7 +365,7 @@ def print_report(report: Dict) -> None:
 
 
 ## IOCs ##
-def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
+def ioc_does_exist(cb: CBCloudAPI, report_id, ioc_id):
     """Check if the given report contains the ioc_id."""
     report = get_report(cb, report_id)
     if not report:
@@ -402,7 +377,7 @@ def ioc_does_exist(cb: CbThreatHunterAPI, report_id, ioc_id):
 
 
 # get IOC status
-def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=False):
+def is_ioc_ignored(cb: CBCloudAPI, report_id, ioc_id, check_existence=False):
     """Return status of IOC."""
     if check_existence:
         if not ioc_does_exist(cb, report_id, ioc_id):
@@ -413,14 +388,14 @@ def is_ioc_ignored(cb: CbThreatHunterAPI, report_id, ioc_id, check_existence=Fal
 
 
 # ignore IOC
-def ignore_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+def ignore_ioc(cb: CBCloudAPI, report_id, ioc_id):
     """Ignore this IOC."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
     return cb.put_object(url, {"ignore": True})
 
 
 # activate IOC
-def activate_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
+def activate_ioc(cb: CBCloudAPI, report_id, ioc_id):
     """Activate IOC."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/reports/{report_id}/iocs/{ioc_id}/ignore"
     resp = cb.delete_object(url)
@@ -430,30 +405,30 @@ def activate_ioc(cb: CbThreatHunterAPI, report_id, ioc_id):
 
 
 ## Watchlists ##
-def get_all_watchlists(cb: CbThreatHunterAPI):
+def get_all_watchlists(cb: CBCloudAPI):
     """Return a list of all watchlists."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
     result = cb.get_object(url)
     return result.get("results", [])
 
 
-def get_watchlist(cb: CbThreatHunterAPI, watchlist_id):
+def get_watchlist(cb: CBCloudAPI, watchlist_id):
     """Get a watchlist by ID."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
     try:
         return cb.get_object(f"{url}/{watchlist_id}")
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting watchlist {watchlist_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No watchlist with ID {watchlist_id}")
 
 
-def get_watchlists_like_name(cb: CbThreatHunterAPI, watchlist_name):
+def get_watchlists_like_name(cb: CBCloudAPI, watchlist_name):
     """Return watchlists with watchlist_name in their name."""
     return [wl for wl in get_all_watchlists(cb) if watchlist_name in wl["name"]]
 
 
-def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
+def create_watchlist(cb: CBCloudAPI, watchlist_data: Dict):
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists"
     try:
         result = cb.post_object(url, watchlist_data)
@@ -467,16 +442,16 @@ def create_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
     return result.json()
 
 
-def delete_watchlist(cb: CbThreatHunterAPI, watchlist_id) -> Dict:
-    """Set this report to ignore status"""
+def delete_watchlist(cb: CBCloudAPI, watchlist_id) -> Dict:
+    """Set this report to ignore status."""
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
     try:
         return cb.delete_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError deleting watchlist {watchlist_id}: {e}")
 
 
-def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
+def update_watchlist(cb: CBCloudAPI, watchlist_data: Dict):
     watchlist_id = watchlist_data["id"]
     url = f"/threathunter/watchlistmgr/v3/orgs/{cb.credentials.org_key}/watchlists/{watchlist_id}"
     try:
@@ -492,17 +467,18 @@ def update_watchlist(cb: CbThreatHunterAPI, watchlist_data: Dict):
 
 
 def create_watchlist_from_report_list(
-    cb: CbThreatHunterAPI, watchlist_name: str, watchlist_description: str, reports: List[Dict]
+    cb: CBCloudAPI, watchlist_name: str, watchlist_description: str, reports: List[Dict]
 ) -> Dict:
     """Create a watchlist built on the supplied intel reports.
 
     Use this to create a single watchlist comprised of the intel reports.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       watchlist_name: Name for the resulting watchlist
       watchlist_description: Description for the resulting watchlist
       reports: The Intel Reports.
+
     Returns:
       Dict representation of the new Watchlist.
     """
@@ -528,13 +504,14 @@ def create_watchlist_from_report_list(
     return watchlist
 
 
-def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, reports: List[Dict]) -> Dict:
+def assign_reports_to_watchlist(cb: CBCloudAPI, watchlist_id: str, reports: List[Dict]) -> Dict:
     """Set a watchlist report IDs attribute to the passed reports.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       watchlist_id: The Watchlist ID to update.
       reports: The Intel Reports.
+
     Returns:
       The Watchlist in dict form.
     """
@@ -544,13 +521,13 @@ def assign_reports_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report
     watchlist_data["report_ids"] = [r["id"] for r in reports]
     watchlist_data = update_watchlist(cb, watchlist_data)
     if not watchlist_data:
-        LOGGER.error(f"unexpected problem updating watchlist with report IDs.")
+        LOGGER.error("unexpected problem updating watchlist with report IDs.")
         return False
 
     return watchlist_data
 
 
-def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_id: str, report_data: Dict) -> Dict:
+def create_new_report_and_append_to_watchlist(cb: CBCloudAPI, watchlist_id: str, report_data: Dict) -> Dict:
     """Create a new threat report from JSON and append to watchlist."""
     watchlist_data = get_watchlist(cb, watchlist_id)
     if not watchlist_data:
@@ -581,7 +558,7 @@ def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_i
     watchlist_data["report_ids"].append(intel_report["id"])
     watchlist_data = update_watchlist(cb, watchlist_data)
     if watchlist_data and len(watchlist_data["report_ids"]) == (watchlist_threat_reports_before + 1):
-        LOGGER.info(f"successfully appended new threat report to watchlist.")
+        LOGGER.info("successfully appended new threat report to watchlist.")
         return True
     return False
 
@@ -590,8 +567,9 @@ def create_new_report_and_append_to_watchlist(cb: CbThreatHunterAPI, watchlist_i
 
 # TODO disable watchlist alerting/taging?
 
+
 ## Feeds ##
-def get_all_feeds(cb: CbThreatHunterAPI, include_public=True) -> Dict:
+def get_all_feeds(cb: CBCloudAPI, include_public=True) -> Dict:
     """Retrieve all feeds owned by the caller.
 
     Provide include_public=true parameter to also include public community feeds.
@@ -602,28 +580,28 @@ def get_all_feeds(cb: CbThreatHunterAPI, include_public=True) -> Dict:
     return result.get("results", [])
 
 
-def get_feed(cb: CbThreatHunterAPI, feed_id: str) -> Dict:
+def get_feed(cb: CBCloudAPI, feed_id: str) -> Dict:
     """Get a specific feed by ID."""
     url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds"
     try:
         return cb.get_object(f"{url}/{feed_id}")
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting feed {feed_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No feed by feed id {feed_id}")
 
 
-def search_feed_names(cb: CbThreatHunterAPI, name: str) -> List[Dict]:
+def search_feed_names(cb: CBCloudAPI, name: str) -> List[Dict]:
     """Search for feeds by name."""
     return [f for f in get_all_feeds(cb) if name in f["name"]]
 
 
-def get_feed_report(cb: CbThreatHunterAPI, feed_id: str, report_id: str) -> Dict:
+def get_feed_report(cb: CBCloudAPI, feed_id: str, report_id: str) -> Dict:
     """Get a specific report from a specific feed."""
     url = f"/threathunter/feedmgr/v2/orgs/{cb.credentials.org_key}/feeds/{feed_id}/reports/{report_id}"
     try:
         return cb.get_object(url)
-    except ServerError:
+    except ServerError as e:
         LOGGER.error(f"Caught ServerError getting feed report {feed_id}: {e}")
     except ObjectNotFoundError:
         LOGGER.warning(f"No feed {feed_id} or report {report_id} in the feed")
@@ -649,14 +627,15 @@ def _safe_filename(raw_string):
     return safe_string
 
 
-def backup_watchlist_threat_reports(cb: CbThreatHunterAPI, watchlist_ids: List):
+def backup_watchlist_threat_reports(cb: CBCloudAPI, watchlist_ids: List):
     """Backup threat reports for safe keeping.
 
     Write threat report json to local directory for each watchlist ID.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       watchlist_ids: List of CBC watchlist IDs to backup.
+
     Returns:
       True on success.
     """
@@ -664,9 +643,8 @@ def backup_watchlist_threat_reports(cb: CbThreatHunterAPI, watchlist_ids: List):
     from cbinterface.config import get_data_directory
 
     data_dir = get_data_directory()
-    if not os.path.exists(data_dir):
-        LOGGER.warning(f"{data_dir} does not exist. using current working directory.")
-        data_dir = "."
+    if not os.path.exists(data_dir) or data_dir == ".":
+        LOGGER.warning("ENV CBINTERFACE_DATA_DIR does not exist. Using current working directory.")
 
     backup_dir = os.path.join(data_dir, "cbc_intel")
     Path(backup_dir).mkdir(parents=True, exist_ok=True)
@@ -718,21 +696,19 @@ def backup_watchlist_threat_reports(cb: CbThreatHunterAPI, watchlist_ids: List):
     return file_paths
 
 
-## Begin Response to PSC EDR Watchlist Migrations ##
-def yield_reports_created_from_response_watchlists(
-    cb: CbThreatHunterAPI, response_watchlists: List[Dict]
-) -> List[Dict]:
-    """Convert a list of response watchlists to PSC EDR intel reports.
+## Begin Response to Enterprise EDR Watchlist Migrations ##
+def yield_reports_created_from_response_watchlists(cb: CBCloudAPI, response_watchlists: List[Dict]) -> List[Dict]:
+    """Convert a list of response watchlists to Enterprise EDR intel reports.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       response_watchlists: List of Response Watchlist in dictionary form.
+
     Returns:
-      Yield PSC Intel Reports for each Response Watchlist.
+      Yield EEDR Intel Reports for each Response Watchlist.
     """
-    psc_watchlist_names = [wl["name"] for wl in get_all_watchlists(cb)]
     for wl_data in response_watchlists:
-        # attempt to convert and validate query syntax for PSC
+        # attempt to convert and validate query syntax for EEDR
         if "query" not in wl_data:
             LOGGER.error("how does a legacy watchlist not have a query? make sure to convert search_query to query.")
             continue
@@ -744,7 +720,7 @@ def yield_reports_created_from_response_watchlists(
             LOGGER.error(f"problem converting query for {wl_data['name']} : {e}")
             continue
         if not cb.validate_query(query):
-            LOGGER.error(f"query did not validate")
+            LOGGER.error("query did not validate")
             continue
 
         report_tags = ["response_migrated_watchlist"]
@@ -756,7 +732,7 @@ def yield_reports_created_from_response_watchlists(
         if not wl_data["enabled"]:
             LOGGER.warning(f"{wl_data['name']} is disabled... NOT creating report.")
             ignore_this_report = True
-            report_description += f"\nIgnored: disabled in Cb Response"
+            report_description += "\nIgnored: disabled in Cb Response"
             report_tags.append("disabled_in_response")
 
         # warn on slow watchlists
@@ -765,7 +741,7 @@ def yield_reports_created_from_response_watchlists(
                 f"{wl_data['name']} last_execution_time time is null. This means an error occurred with it's execution. Setting report to ignore."
             )
             ignore_this_report = True
-            report_description += f"\nIgnored: last execution error'd in Cb Response"
+            report_description += "\nIgnored: last execution error'd in Cb Response"
             report_tags.append("execution_errors_in_response")
         elif int(wl_data["last_execution_time_ms"]) > 10000:
             seconds = int(wl_data["last_execution_time_ms"]) / 1000
@@ -774,7 +750,7 @@ def yield_reports_created_from_response_watchlists(
             if seconds > 30:
                 LOGGER.warning(f"{wl_data['name']} has been 💩 slow in response. Setting report to ignore...")
                 ignore_this_report = True
-                report_description += f"\nIgnored: has been 💩 slow in Cb Response. Improve it!?"
+                report_description += "\nIgnored: has been 💩 slow in Cb Response. Improve it!?"
 
         # inform of hit count per day
         hit_count = int(wl_data["total_hits"])
@@ -808,18 +784,19 @@ def yield_reports_created_from_response_watchlists(
         yield intel_report
 
 
-def convert_response_watchlists_to_psc_edr_watchlists(
-    cb: CbThreatHunterAPI, response_watchlists: List[Dict]
+def convert_response_watchlists_to_enterprise_edr_watchlists(
+    cb: CBCloudAPI, response_watchlists: List[Dict]
 ) -> List[Dict]:
-    """Convert a list of response watchlists to PSC EDR watchlists.
+    """Convert a list of response watchlists to Enterprise EDR watchlists.
 
     This is a one-for-one Watchlist migration. You probably don't want this.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       response_watchlists: List of response watchlist in dictionary form.
+
     Returns:
-      List of PSC Watchlists.
+      List of EEDR Watchlists.
     """
     results = []
     for intel_report in yield_reports_created_from_response_watchlists(cb, response_watchlists):
@@ -846,28 +823,29 @@ def convert_response_watchlists_to_psc_edr_watchlists(
     return results
 
 
-def convert_response_watchlists_to_single_psc_edr_watchlist(
-    cb: CbThreatHunterAPI,
+def convert_response_watchlists_to_single_enterprise_edr_watchlist(
+    cb: CBCloudAPI,
     response_watchlists: List[Dict],
     watchlist_name: str = None,
     watchlist_description="Consolidated Cb Respone Watchlists. Each report in this watchlist is based on a Cb Response Watchlist",
 ) -> List[Dict]:
-    """Convert a list of Response Watchlists to PSC EDR watchlists.
+    """Convert a list of Response Watchlists to Enterprise EDR watchlists.
 
     This is a many-to-one Watchlist migration.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       response_watchlists: List of Response Ratchlist in dictionary form.
-      watchlist_name: The name to give the resulting Response consolidated PSC EDR Watchlist.
+      watchlist_name: The name to give the resulting Response consolidated Enterprise EDR Watchlist.
       watchlist_description: The description to give the resulting Watchlist.
+
     Returns:
-      PSC Watchlist containing all Response Watchlists as intel Reports.
+      EEDR Watchlist containing all Response Watchlists as intel Reports.
     """
     from cbinterface.helpers import input_with_timeout
 
     if watchlist_name is None:
-        watchlist_name = input_with_timeout("Enter a name for the resulting PSC EDR Watchlist: ", stderr=False)
+        watchlist_name = input_with_timeout("Enter a name for the resulting Enterprise EDR Watchlist: ", stderr=False)
         watchlist_description = (
             input_with_timeout(
                 f"Enter a description for the Watchlist [default description: {watchlist_description}] : ", stderr=False
@@ -882,21 +860,22 @@ def convert_response_watchlists_to_single_psc_edr_watchlist(
     return create_watchlist_from_report_list(cb, watchlist_name, watchlist_description, reports)
 
 
-def convert_response_watchlists_to_grouped_psc_edr_watchlists(
-    cb: CbThreatHunterAPI,
+def convert_response_watchlists_to_grouped_enterprise_edr_watchlists(
+    cb: CBCloudAPI,
     response_watchlists: List[Dict],
     watchlist_names_start_with: str = "ACE ",
 ) -> List[Dict]:
-    """Convert a list of Response Watchlists to PSC EDR watchlists.
+    """Convert a list of Response Watchlists to Enterprise EDR watchlists.
 
     This is a many-to-two Watchlist migration based on metrics provided by Response.
 
     Args:
-      cb: Cb PSC object
+      cb: CBCloudAPI object
       response_watchlists: List of Response Ratchlist in dictionary form.
       watchlist_names_start_with: A key/identifer to start the watchlist names with.
+
     Returns:
-      List of PSC Watchlists.
+      List of Enterprise EDR Watchlists.
     """
     from cbinterface.helpers import input_with_timeout
 

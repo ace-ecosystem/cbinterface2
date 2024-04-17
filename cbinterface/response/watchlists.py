@@ -1,6 +1,6 @@
 """Everything Watchlist management.
 
-I wrote everything here to help migrate watchlists to to PSC EDR.
+I wrote everything here to help migrate watchlists to to Enterprise EDR.
 """
 
 import datetime
@@ -21,7 +21,7 @@ def get_all_watchlists(cb: CbResponseAPI) -> SimpleQuery:
 
 
 def query_watchlists(cb: CbResponseAPI, query: str) -> SimpleQuery:
-    """perform watchlist query"""
+    """Perform watchlist query."""
     try:
         return cb.select(Watchlist).where(query)
     except Exception as e:
