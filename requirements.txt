@@ -1,4 +1,4 @@
 cbapi==1.7.3
 coloredlogs==15.0
-argcomplete==1.12.2
+argcomplete>=2.0.0,<3.0.0
 carbon-black-cloud-sdk
