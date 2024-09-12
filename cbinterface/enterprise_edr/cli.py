@@ -974,7 +974,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
     # Live Response Actions #
     if args.command and (args.command.lower() == "lr" or args.command.lower().startswith("live")):
         # create a LR session manager
-        session_manager = CustomLiveResponseSessionManager(cb, custom_session_keepalive=True)
+        session_manager = CustomLiveResponseSessionManager(cb)
         # store a list of commands to execute on this device
         commands = []
 
@@ -1108,7 +1108,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
         # Handle LR commands #
         if commands:
-            timeout = 1200  # default 20 minutes (same used by Cb)
+            timeout = 900  # default 15 minutes (same used by Cb)
             if not is_device_online(device):
                 # Decision point: if the device is NOT online, give the analyst and option to wait
                 LOGGER.warning(f"{device.id}:{device.name} is offline.")

@@ -6,18 +6,18 @@ import time
 import logging
 import threading
 
-from cbapi.psc import Device
-from cbapi.psc.threathunter import CbThreatHunterAPI
-from cbapi.psc.cblr import (
+from cbc_sdk.platform.devices import Device
+
+from cbc_sdk import CBCloudAPI
+from cbc_sdk.live_response_api import (
     LiveResponseSession,
     LiveResponseSessionManager,
     LiveResponseJobScheduler,
     WorkItem,
     JobWorker,
 )
-from cbapi.errors import ObjectNotFoundError, TimeoutError
+from cbc_sdk.errors import ObjectNotFoundError, TimeoutError
 
-# from cbapi.live_response_api import CbLRManagerBase, WorkItem, poll_status
 
 from typing import List, Union
 
@@ -26,12 +26,12 @@ from cbinterface.enterprise_edr.device import is_device_online
 
 LOGGER = logging.getLogger("cbinterface.enterprise_edr.session")
 
-CBLR_BASE = "/integrationServices/v3/cblr"
+CBLR_BASE = "/appservices/v6/orgs/{org_key}/liveresponse"
 
 
 class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
-    def __init__(self, cb, psc_cb, max_workers=10):
-        self.psc_cb = psc_cb
+    def __init__(self, cb, enterprise_edr_cb, max_workers=10):
+        self.enterprise_edr = enterprise_edr_cb
         super().__init__(cb, max_workers=10)
 
     def _spawn_new_workers(self):
@@ -41,7 +41,9 @@ class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
         schedule_max = self._max_workers - len(self._job_workers)
 
         devices = [
-            s for s in self.psc_cb.select(Device) if s.id in self._unscheduled_jobs and s.id not in self._job_workers
+            s
+            for s in self.enterprise_edr.select(Device)
+            if s.id in self._unscheduled_jobs and s.id not in self._job_workers
         ]
         # and is_device_online(s)]
 
@@ -56,10 +58,10 @@ class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
 class CustomLiveResponseSessionManager(LiveResponseSessionManager):
     def __init__(self, cb, timeout=30, custom_session_keepalive=False):
         # First, get a CB object with the LR API permissions
-        cblr = CbThreatHunterAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.token, org_key=cb.credentials.org_key)
         super().__init__(cblr, timeout=timeout, keepalive_sessions=False)
         # so now self._cb == cblr -- store a reference to the regular cb
-        self.psc_cb = cb
+        self.eedr_cb = cb
 
         if custom_session_keepalive:
             self._cleanup_thread = threading.Thread(target=self._keep_active_sessions_alive_thread)
@@ -71,7 +73,10 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
     def get_session(self, device: Device):
         """Get or create LR session."""
-        session_data = self._cb.post_object(f"{CBLR_BASE}/session/{device.id}", {"sensor_id": device.id}).json()
+        session_data = self._cb.post_object(
+            f"{CBLR_BASE}/sessions".format(org_key=self.eedr_cb.credentials.org_key),
+            {"device_id": device.id},
+        ).json()
         session_id = session_data["id"]
         LOGGER.debug(f"got session id={session_id} with status={session_data['status']}")
         self._sessions[device.id] = self.cblr_session_cls(self, session_id, device.id, session_data=session_data)
@@ -121,7 +126,7 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
 
         if self._job_scheduler is None:
             # spawn the scheduler thread
-            self._job_scheduler = CustomLiveResponseJobScheduler(self._cb, self.psc_cb)
+            self._job_scheduler = CustomLiveResponseJobScheduler(self._cb, self.eedr_cb)
             self._job_scheduler.start()
 
         if device_id not in self._sessions:
@@ -207,12 +212,12 @@ class CustomLiveResponseSessionManager(LiveResponseSessionManager):
                     del self._sessions[device_id]
 
 
-def all_live_response_sessions(cb: CbThreatHunterAPI) -> List:
+def all_live_response_sessions(cb: CBCloudAPI) -> List:
     """List all LR sessions still in server memory."""
     return [sesh for sesh in cb.get_object(f"{CBLR_BASE}/session")]
 
 
-def active_live_response_sessions(cb: CbThreatHunterAPI) -> List:
+def active_live_response_sessions(cb: CBCloudAPI) -> List:
     """Return active LR sessions."""
     return [sesh for sesh in cb.get_object(f"{CBLR_BASE}/session?active_only=true")]
 
@@ -225,7 +230,7 @@ def device_live_response_sessions(device: Device, active_or_pending=False):
     return sessions
 
 
-def device_live_response_sessions_by_device_id(cb: CbThreatHunterAPI, device_id: Union[int, str]):
+def device_live_response_sessions_by_device_id(cb: CBCloudAPI, device_id: Union[int, str]):
     """Get sessions associated to this device by device id."""
     if isinstance(device_id, str):
         device_id = int(device_id)
@@ -233,21 +238,21 @@ def device_live_response_sessions_by_device_id(cb: CbThreatHunterAPI, device_id:
     return sessions
 
 
-def get_session_by_id(cb: CbThreatHunterAPI, session_id):
+def get_session_by_id(cb: CBCloudAPI, session_id):
     """Get a LR session object by id."""
     try:
-        return cb.get_object(f"{CBLR_BASE}/session/{session_id}")
+        return cb.get_object(f"{CBLR_BASE}/sessions/{session_id}".format(org_key=cb.credentials.org_key))
     except ObjectNotFoundError:
-        LOGGER.warning(f"no live resonse session by ID={session_id}")
+        LOGGER.warning(f"no live response session by ID={session_id}")
         return None
 
 
-def close_session_by_id(cb: CbThreatHunterAPI, session_id):
+def close_session_by_id(cb: CBCloudAPI, session_id):
     """Close a session by ID."""
     return cb.put_object(f"{CBLR_BASE}/session", {"session_id": session_id, "status": "CLOSE"}).json()
 
 
-def get_session_status(cb: CbThreatHunterAPI, session_id):
+def get_session_status(cb: CBCloudAPI, session_id):
     """Return any session status or None."""
     session = get_session_by_id(cb, session_id)
     if session is None:
@@ -262,25 +267,25 @@ def is_session_active(session: LiveResponseSession):
     return False
 
 
-def get_session_commands(cb: CbThreatHunterAPI, session_id: str):
+def get_session_commands(cb: CBCloudAPI, session_id: str):
     """List commands for this session."""
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command")
     except ObjectNotFoundError:
-        LOGGER.warning(f"no live resonse session by ID={session_id}")
+        LOGGER.warning(f"no live response session by ID={session_id}")
         return None
 
 
-def get_command_result(cb: CbThreatHunterAPI, session_id: str, command_id: str):
+def get_command_result(cb: CBCloudAPI, session_id: str, command_id: str):
     """Get results of a LR session command."""
     try:
         return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command/{command_id}")
     except ObjectNotFoundError:
-        LOGGER.warning(f"no live resonse session and/or command combination for {session_id}:{command_id}")
+        LOGGER.warning(f"no live response session and/or command combination for {session_id}:{command_id}")
         return None
 
 
-def get_file_content(cb: CbThreatHunterAPI, session_id: str, file_id: str):
+def get_file_content(cb: CBCloudAPI, session_id: str, file_id: str):
     """Get file content stored in LR session and write the file locally."""
     from cbinterface.helpers import get_os_independent_filepath
 

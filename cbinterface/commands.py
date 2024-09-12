@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import Union
 from concurrent.futures import Future
 
-from cbapi.live_response_api import CbLRSessionBase
+from cbc_sdk.live_response_api import CbLRSessionBase
 
 LOGGER = logging.getLogger("cbinterface.command")
 
@@ -38,7 +38,7 @@ class BaseSessionCommand:
     def fill_placeholders(self, string_item: str, placeholders={}):
         # fill common placeholders
         placeholders = placeholders if placeholders else self.placeholders
-        hostname = self.hostname[self.hostname.rfind('\\')+1:] if '\\' in self.hostname else self.hostname
+        hostname = self.hostname[self.hostname.rfind("\\") + 1 :] if "\\" in self.hostname else self.hostname
         placeholders["HOSTNAME"] = placeholders.get("HOSTNAME", hostname)
         placeholders["SENSOR_ID"] = placeholders.get("SENSOR_ID", self.sensor_id)
         placeholders["DEVICE_ID"] = placeholders.get("DEVICE_ID", self.sensor_id)

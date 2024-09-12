@@ -113,7 +113,6 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
     Returns:
         True or None on success, False on failure.
     """
-
     if not isinstance(cb, CbResponseAPI):
         LOGGER.critical(f"expected CbResponseAPI but got '{type(cb)}'")
         return False
@@ -231,7 +230,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 process_segment = None
             proc.current_segment = process_segment
         except ObjectNotFoundError:
-            LOGGER.warning(f"ObjectNotFoundError - process data does not exist.")
+            LOGGER.warning("ObjectNotFoundError - process data does not exist.")
             return False
         except Exception as e:
             LOGGER.error(f"problem finding process: {e}")
@@ -242,7 +241,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
             iarg for iarg, value in vars(args).items() if iarg.startswith("inspect_") and value is True
         ]
         if not set_inspection_args:
-            LOGGER.debug(f"seting all inspection arguments.")
+            LOGGER.debug("seting all inspection arguments.")
             for iarg in all_inspection_args:
                 args.__setattr__(iarg, True)
 
@@ -293,11 +292,11 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
         try:
             sensor = Sensor(cb, args.name_or_id, force_init=True)
         except ObjectNotFoundError:
-            LOGGER.info(f"searching for sensor...")
+            LOGGER.info("searching for sensor...")
             sensor = find_sensor_by_hostname(cb, args.name_or_id)
 
         if not sensor:
-            LOGGER.info(f"could not find a sensor.")
+            LOGGER.info("could not find a sensor.")
             return None
 
         if args.execute_command:
@@ -429,7 +428,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
 
         # Handle LR commands #
         if commands:
-            timeout = 1200  # default 20 minutes (same used by Cb)
+            timeout = 900  # default 20 minutes (same used by Cb)
             if not is_sensor_online(sensor):
                 # Decision point: if the sensor is NOT online, give the analyst and option to wait
                 LOGGER.warning(f"{sensor.id}:{sensor.hostname} is offline.")
@@ -450,7 +449,7 @@ def execute_response_arguments(cb: CbResponseAPI, args: argparse.Namespace) -> b
                 timeout = timeout * 86400
 
             if not session_manager.wait_for_active_session(sensor, timeout=timeout):
-                LOGGER.error(f"reached timeout waiting for active session.")
+                LOGGER.error("reached timeout waiting for active session.")
                 return False
 
             # we have an active session, issue the commands.
