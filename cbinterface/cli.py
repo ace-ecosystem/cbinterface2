@@ -245,7 +245,7 @@ def main():
     )
     parser_lr.add_argument("name_or_id", help="the hostname or sensor/device id to go live with.")
     parser_lr.add_argument(
-        "-e", "--execute-command", action="store", help="Execute this command on the sensor. NOTE: waits for output."
+        "-e", "--execute-command", action="append", help="Execute this command on the sensor. Can pass multiple commands. NOTE: waits for output."
     )
     parser_lr.add_argument("-cr", "--create-regkey", action="store", help="Create this regkey.")
     parser_lr.add_argument("-sr", "--set-regkey-value", action="append", help="Set this regkey value.")

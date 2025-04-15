@@ -990,11 +990,10 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
             return None
 
         if args.execute_command:
-            # XXX expand this for more flexibiliy by making an execute parser
-            # that can accept more arugments to pass to ExecuteCommand
-            cmd = ExecuteCommand(args.execute_command)
-            commands.append(cmd)
-            LOGGER.info(f"recorded command: {cmd}")
+            for c in args.execute_command:
+                cmd = ExecuteCommand(c)
+                commands.append(cmd)
+                LOGGER.info(f"recorded command: {cmd}")
 
         # Quarantine?
         if args.quarantine:
@@ -1142,7 +1141,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
     # Direct Session Interaction #
     if args.command and args.command.startswith("sess"):
-        cblr = CBCloudAPI(url=cb.credentials.url, token=cb.credentials.lr_token, org_key=cb.credentials.org_key)
+        cblr = CBCloudAPI(url=cb.credentials.url,  org_key=cb.credentials.org_key)
 
         # if args.list_all_sessions:
         # Not implemented with Enterprise EDR
