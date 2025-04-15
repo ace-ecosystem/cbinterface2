@@ -30,7 +30,7 @@ setup(
     url="https://github.com/ace-ecosystem/cbinterface2",
     author="Sean McFeely",
     author_email="mcfeelynaes@gmail.com",
-    license="Apache-2.0",
+    license_files=["Apache-2.0"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
