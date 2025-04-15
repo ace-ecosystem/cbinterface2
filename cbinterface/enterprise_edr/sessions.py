@@ -39,14 +39,20 @@ class CustomLiveResponseJobScheduler(LiveResponseJobScheduler):
             return
 
         schedule_max = self._max_workers - len(self._job_workers)
-
-        devices = [
-            s
-            for s in self.enterprise_edr.select(Device)
-            if s.id in self._unscheduled_jobs and s.id not in self._job_workers
-        ]
+        # Original code from cbc_sdk which is super slow and 
+        # buggy as it queries all devices in the environment
+        #devices = [
+        #    s
+        #    for s in self.enterprise_edr.select(Device)
+        #    if s.id in self._unscheduled_jobs and s.id not in self._job_workers
+        #]
         # and is_device_online(s)]
-
+        devices = [
+            device for device_id in self._unscheduled_jobs
+            if device_id not in self._job_workers
+            and (device := self._cb.select(Device, device_id))
+            and is_device_online(device)
+        ]
         devices_to_schedule = devices[:schedule_max]
         LOGGER.debug("Spawning new workers to handle these devices: {0}".format(devices_to_schedule))
         for device in devices_to_schedule:
@@ -279,7 +285,7 @@ def get_session_commands(cb: CBCloudAPI, session_id: str):
 def get_command_result(cb: CBCloudAPI, session_id: str, command_id: str):
     """Get results of a LR session command."""
     try:
-        return cb.get_object(f"{CBLR_BASE}/session/{session_id}/command/{command_id}")
+        return cb.get_object(f"{CBLR_BASE}/sessions/{session_id}/commands/{command_id}".format(org_key=cb.credentials.org_key))
     except ObjectNotFoundError:
         LOGGER.warning(f"no live response session and/or command combination for {session_id}:{command_id}")
         return None
