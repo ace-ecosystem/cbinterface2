@@ -991,7 +991,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
 
         if args.execute_command:
             for c in args.execute_command:
-                cmd = ExecuteCommand(c)
+                cmd = GetFile(c.split()[-1]) if c.startswith("collect -f") else ExecuteCommand(c)
                 commands.append(cmd)
                 LOGGER.info(f"recorded command: {cmd}")
 
