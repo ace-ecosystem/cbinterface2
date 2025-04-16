@@ -255,7 +255,7 @@ class ExecuteCommand(BaseSessionCommand):
     def run(self, session: CbLRSessionBase):
         self._command_string = self.fill_placeholders(self._command_string)
         self.start_time = time.time()
-        session.create_process(
+        ss = session.create_process(
             self._command_string,
             wait_for_output=self.wait_for_output,
             remote_output_file_name=self.remote_output_file_name,
@@ -264,6 +264,7 @@ class ExecuteCommand(BaseSessionCommand):
             wait_for_completion=self.wait_for_completion,
         )
         self.elapsed_time = timedelta(seconds=(time.time() - self.start_time))
+        return ss
 
     def process_result(self):
         LOGGER.debug(f"{self} took {self.elapsed_time} to return.")
@@ -276,10 +277,7 @@ class ExecuteCommand(BaseSessionCommand):
             LOGGER.info(f"successfully executed '{self._command_string}'. no results returned.")
             return True
         if self.print_results:
-            print("\n-------------------------")
-            print(self.result.decode("utf-8"))
-            print("\n-------------------------")
-            print()
+            print(f'-------------------------\n{self.result.decode("utf-8")}-------------------------')
         if self.write_results_path:
             self.write_results_path = self.fill_placeholders(self.write_results_path)
             if os.path.exists(self.write_results_path):
