@@ -14,7 +14,7 @@ from typing import List, Union
 
 from cbc_sdk import __file__ as cbc_sdk_file_path
 from cbc_sdk.platform.devices import Device, DeviceSearchQuery
-from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError, ClientError
+from cbc_sdk.errors import ObjectNotFoundError, MoreThanOneResultError
 from cbc_sdk.enterprise_edr import Watchlist, Feed
 from cbc_sdk import CBCloudAPI
 from cbc_sdk.platform import Process
@@ -982,7 +982,7 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
         device = None
         try:  # if device.id
             device = Device(cb, args.name_or_id)
-        except ClientError:
+        except ObjectNotFoundError:
             device = find_device_by_hostname(cb, args.name_or_id)
 
         if not device:
