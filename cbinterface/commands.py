@@ -54,7 +54,7 @@ class BaseSessionCommand:
 
     @property
     def sensor_id(self):
-        return self.session_data.get("sensor_id") or self._sensor_id
+        return self.session_data.get("device_id") or self._sensor_id
 
     @property
     def initiatied(self):
@@ -454,7 +454,6 @@ class GetFile(BaseSessionCommand):
         """
         super().__init__(description=f"getFile @ '{file_path}'", **kwargs)
         self._file_path = file_path
-
         self.output_filename = output_filename
 
     def run(self, session: CbLRSessionBase):
@@ -490,15 +489,15 @@ class GetFile(BaseSessionCommand):
         """Write the results to a local file."""
         from cbinterface.helpers import get_os_independent_filepath
 
+        filepath = get_os_independent_filepath(self._file_path)
         if self.output_filename is None:
-            filepath = get_os_independent_filepath(self._file_path)
             hostname_part = f"{self.hostname}_" if self.hostname else ""
             self.output_filename = f"{self.sensor_id}_{hostname_part}{filepath.name}"
         else:
-            self.output_filename = self.fill_placeholders(self.output_filename)
+            self.output_filename = self.fill_placeholders(self.output_filename, {'SOURCE_FILENAME': filepath.name})
 
         try:
-            if os.path.exists(self.output_filename):
+            if os.path.exists(self.output_filename) and self.output_filename != filepath.name:
                 LOGGER.debug(f"{self.output_filename} already exists. appending epoch time")
                 _now = str(time.time())
                 _now = _now[: _now.rfind(".")]
@@ -510,6 +509,7 @@ class GetFile(BaseSessionCommand):
             if os.path.exists(self.output_filename):
                 LOGGER.info(f"wrote: {self.output_filename}")
             if self.post_completion_command:
+                self.post_completion_command = self.fill_placeholders(self.post_completion_command, {'SOURCE_FILENAME': filepath.name})
                 self.execute_post_completion()
             return True
         except Exception as e:
@@ -518,7 +518,7 @@ class GetFile(BaseSessionCommand):
 
 
 ########################
-# Remediaiton Commands #
+# Remediation Commands #
 ########################
 class DeleteFile(BaseSessionCommand):
     """Object that deletes a file via Live Response."""
