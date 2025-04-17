@@ -1155,7 +1155,11 @@ def execute_eedr_arguments(cb: CBCloudAPI, args: argparse.Namespace) -> bool:
             print(json.dumps(get_session_by_id(cblr, args.get_session), indent=2, sort_keys=True))
 
         if args.close_session:
-            print(json.dumps(close_session_by_id(cblr, args.close_session), indent=2, sort_keys=True))
+            close_session_res = close_session_by_id(cblr, args.close_session)
+            if close_session_res.status_code == 204:
+                print("Session has been closed.")
+            else:
+                print(f"Error closing session: {close_session_res.status_code} {close_session_res.text}")
 
         if args.get_command_result:
             session_id, device_id, command_id = args.get_command_result.split(":", 2)

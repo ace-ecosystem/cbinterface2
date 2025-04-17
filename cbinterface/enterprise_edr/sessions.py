@@ -255,7 +255,7 @@ def get_session_by_id(cb: CBCloudAPI, session_id):
 
 def close_session_by_id(cb: CBCloudAPI, session_id):
     """Close a session by ID."""
-    return cb.put_object(f"{CBLR_BASE}/session", {"session_id": session_id, "status": "CLOSE"}).json()
+    return cb.delete_object(f"{CBLR_BASE}/sessions/{session_id}".format(org_key=cb.credentials.org_key))
 
 
 def get_session_status(cb: CBCloudAPI, session_id):
